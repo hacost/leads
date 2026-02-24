@@ -1,0 +1,12 @@
+{
+    "segmentation": {
+        "micro_max_reviews": 20,
+        "corporate_min_reviews": 21,
+        "good_rating_threshold": 3.5
+    },
+    "search": {
+        "max_scroll_attempts": 5,
+        "wait_between_actions_ms": 3000,
+        "headless": false
+    }
+}

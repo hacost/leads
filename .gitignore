@@ -1,0 +1,32 @@
+# --- Python Standard ---
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# --- Virtual Environments (UV) ---
+.venv/
+# Nota: uv.lock SÍ se debe subir al repo (como package-lock.json), 
+# así que no lo agregues aquí.
+
+# A veces los agentes generan logs locales muy largos
+*.log
+
+# --- Environment Variables (Seguridad CRÍTICA) ---
+*.env
+.env.*
+# Por si acaso tienes un archivo de claves específico
+keys.json
+secrets.json
+
+# --- macOS (Molestos archivos del sistema) ---
+.DS_Store
+
+# --- IDEs (Opcional, pero recomendado para no ensuciar el repo) ---
+.vscode/
+.idea/
+
+# --- Notebooks (Si usas Jupyter para probar los agentes) ---
+.ipynb_checkpoints/
