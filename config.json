@@ -7,6 +7,7 @@
     "search": {
         "max_scroll_attempts": 5,
         "wait_between_actions_ms": 3000,
+        "_comment_headless": "Set to false to see the browser UI visually. Set to true to run fully in the background (console only).",
         "headless": false
     }
 }
