@@ -567,6 +567,14 @@ class GoogleMapsScraper:
             # Remove any residual duplicates just in case before splitting
             df_valid.drop_duplicates(subset=['name', 'phone'], inplace=True)
             
+            # Calculate discarded leads (Poor reviews)
+            discarded_count = len(df_valid[df_valid['segment'] == 'Other'])
+            if discarded_count > 0:
+                print(f"[INFO] Discarded {discarded_count} leads due to poor Google ratings (< {self.config['segmentation']['good_rating_threshold']} stars).")
+            
+            # Update Master List (df_valid) to ONLY include Micro and Corporate
+            df_valid = df_valid[df_valid['segment'].isin(['Micro', 'Corporate'])].copy()
+            
             df_micro = df_valid[df_valid['segment'] == 'Micro'].copy()
             df_corporate = df_valid[df_valid['segment'] == 'Corporate'].copy()
         else:
