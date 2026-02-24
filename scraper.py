@@ -575,35 +575,44 @@ class GoogleMapsScraper:
 
         # 5. EXPORTS (No duplicates, no missing phones in master/micro/corporate)
         
+        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+        output_dir = os.path.join("leads", timestamp)
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"\n📁 Saving all exported files to: {output_dir}/")
+        
         # A. Master List (Valid Phones Only)
         try:
             if not df_valid.empty:
-                df_valid.drop(columns=['segment'], errors='ignore').to_excel("leads_google_maps.xlsx", index=False)
-                print(f"[SUCCESS] Exported {len(df_valid)} unique leads to leads_google_maps.xlsx")
+                file_path = os.path.join(output_dir, "leads_google_maps.xlsx")
+                df_valid.drop(columns=['segment'], errors='ignore').to_excel(file_path, index=False)
+                print(f"[SUCCESS] Exported {len(df_valid)} unique leads to {file_path}")
         except Exception as e:
             print(f"[ERROR] Master Export: {e}")
 
         # B. Micro List (Valid Phones Only)
         try:
             if not df_micro.empty:
-                df_micro.drop(columns=['segment'], errors='ignore').to_excel("leads_micro.xlsx", index=False)
-                print(f"[SUCCESS] Exported {len(df_micro)} unique MICRO leads to leads_micro.xlsx")
+                file_path = os.path.join(output_dir, "leads_micro.xlsx")
+                df_micro.drop(columns=['segment'], errors='ignore').to_excel(file_path, index=False)
+                print(f"[SUCCESS] Exported {len(df_micro)} unique MICRO leads to {file_path}")
         except Exception as e:
              print(f"[ERROR] Micro Export: {e}")
 
         # C. Corporate List (Valid Phones Only)
         try:
             if not df_corporate.empty:
-                df_corporate.drop(columns=['segment'], errors='ignore').to_excel("leads_corporate.xlsx", index=False)
-                print(f"[SUCCESS] Exported {len(df_corporate)} unique CORPORATE leads to leads_corporate.xlsx")
+                file_path = os.path.join(output_dir, "leads_corporate.xlsx")
+                df_corporate.drop(columns=['segment'], errors='ignore').to_excel(file_path, index=False)
+                print(f"[SUCCESS] Exported {len(df_corporate)} unique CORPORATE leads to {file_path}")
         except Exception as e:
              print(f"[ERROR] Corporate Export: {e}")
              
         # D. Pending List (No Phones)
         try:
             if not df_pending.empty:
-                df_pending.to_excel("leads_pending_lookup.xlsx", index=False)
-                print(f"[SUCCESS] Exported {len(df_pending)} unique pending leads to leads_pending_lookup.xlsx")
+                file_path = os.path.join(output_dir, "leads_pending_lookup.xlsx")
+                df_pending.to_excel(file_path, index=False)
+                print(f"[SUCCESS] Exported {len(df_pending)} unique pending leads to {file_path}")
         except Exception as e:
              print(f"[ERROR] Pending Export: {e}")
 

@@ -4,15 +4,33 @@ import pandas as pd
 import os
 import re
 import sys
+import glob
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+def get_latest_pending_file():
+    """Finds the most recent leads_pending_lookup.xlsx inside the leads/ directory."""
+    list_of_files = glob.glob('leads/*/leads_pending_lookup.xlsx')
+    if not list_of_files:
+        if os.path.exists('leads_pending_lookup.xlsx'):
+            return 'leads_pending_lookup.xlsx'
+        return None
+    return max(list_of_files, key=os.path.getmtime)
 
 class EnrichmentScraper:
-    def __init__(self, input_file="leads_pending_lookup.xlsx", output_file="leads_pending_lookup.xlsx"):
+    def __init__(self, input_file=None, output_file=None):
+        if input_file is None:
+            input_file = get_latest_pending_file() or "leads_pending_lookup.xlsx"
+            
         self.input_file = input_file
-        self.output_file = output_file
+        
+        if output_file is None:
+            dir_name = os.path.dirname(self.input_file)
+            self.output_file = os.path.join(dir_name, "leads_enriched.xlsx") if dir_name else "leads_enriched.xlsx"
+        else:
+            self.output_file = output_file
+            
         self.results = []
         
     async def process_leads(self):
