@@ -1,4 +1,4 @@
-# Bastion Leads Generation Scraper (Google Maps + Facebook)
+# Leads Generation Scraper (Google Maps + Facebook)
 
 This project provides an automated, precise, and highly configurable system for scraping business leads from Google Maps and enriching them with additional contact information from Facebook (Emails and WhatsApp/Phones). It is designed to filter out low-quality leads and categorize businesses based on their review count and ratings.
 
