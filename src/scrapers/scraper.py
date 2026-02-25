@@ -18,13 +18,16 @@ class GoogleMapsScraper:
     Scraper for Google Maps business listings via Playwright.
     Methods to search, scroll feed, extract details (Name, Address, Phone), and save data.
     """
-    def __init__(self):
+    def __init__(self, headless_override=None):
         self.results = []
         self.known_leads = {} # Cache for existing DB records: {(name, zone): data_dict}
         self.seen_names = set() # Global session cache for names
         self.seen_phones = set() # Global session cache for phones
         self.config = self.load_config()
-        self.headless = self.config['search']['headless'] # Set config headless mode
+        if headless_override is not None:
+            self.headless = headless_override
+        else:
+            self.headless = self.config['search']['headless'] # Set config headless mode
         self.load_known_leads()
 
     def load_config(self):
@@ -640,9 +643,11 @@ async def main():
     print("Welcome to the Google Maps Leads Scraper")
     print("----------------------------------------")
     
+    is_agent = False
     if args.zones and args.categories:
         zones_input = args.zones
         cats_input = args.categories
+        is_agent = True
     else:
         # User Input
         print("Enter the zones/cities (separated by semicolon). Example: Monterrey; Santiago, Nuevo Leon")
@@ -660,7 +665,7 @@ async def main():
         return
 
     # Run Scraper
-    scraper = GoogleMapsScraper()
+    scraper = GoogleMapsScraper(headless_override=True if is_agent else None)
     await scraper.scrape(zones, categories)
     
     # Save Results

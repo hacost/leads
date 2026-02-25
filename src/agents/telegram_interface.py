@@ -91,8 +91,16 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         import json
         
-        # Extraemos el último mensaje generado por el Agente (la respuesta final en texto)
-        respuesta_cruda = respuesta_grafo["messages"][-1].content
+        ultimo_mensaje = respuesta_grafo["messages"][-1]
+        respuesta_cruda = ultimo_mensaje.content
+        
+        # Imprimir tokens usados si están disponibles
+        if hasattr(ultimo_mensaje, 'usage_metadata') and ultimo_mensaje.usage_metadata:
+            tokens = ultimo_mensaje.usage_metadata
+            in_tokens = tokens.get('input_tokens', 0)
+            out_tokens = tokens.get('output_tokens', 0)
+            total_tokens = tokens.get('total_tokens', 0)
+            print(f"   [🪙 TOKENS GEMINI] Entrada: {in_tokens} | Salida: {out_tokens} | Usados esta vez: {total_tokens}")
         
         # A veces Gemini devuelve el texto como una lista de bloques JSON o un string en formato JSON raro.
         # Vamos a limpiarlo para que sea siempre texto humano puro.
