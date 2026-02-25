@@ -97,7 +97,11 @@ class GoogleMapsScraper:
             # Init browser
             # We use chromium. Launch options can be adjusted.
             browser = await p.chromium.launch(headless=self.headless)
-            context = await browser.new_context(viewport={"width": 1280, "height": 800})
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                locale="es-MX",
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            )
             page = await context.new_page()
 
             # Clear session cache at the start of a new run
@@ -384,7 +388,7 @@ class GoogleMapsScraper:
 
             data['zone'] = query
             self.results.append(data)
-            print(f"[{i+1}/{len(listings)}] Extracted: {data['name']} - Ph: {data.get('phone', 'N/A')} - Em: {data.get('email', 'N/A')}")
+            print(f"[{i+1}/{len(listings)}] Extracted: {data['name']} - Stars: {data.get('stars')} - Revs: {data.get('reviews')}")
 
     async def get_facebook_contact(self, context, business_name, zone):
         # ... (Method remains for future use) ...
