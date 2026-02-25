@@ -104,17 +104,24 @@ herramientas_del_agente = [ejecutar_scraper_google_maps, ejecutar_scraper_facebo
 #   3. El nodo de Herramientas ejecuta la función de Python (ej. subprocess) y devuelve el texto.
 #   4. Le regresa el texto al LLM. El ciclo inicia de nuevo hasta que el LLM decide que ya tiene la respuesta.
 
+# Leemos las variables de personalización
+agent_name = os.getenv("AGENT_NAME", "Agente Elite B2B")
+user_title = os.getenv("USER_TITLE", "CEO")
+
+system_prompt = f"""
+    Eres '{agent_name}', una Inteligencia Artificial especializada en Generación de Leads B2B. 
+    Vives en un servidor local y siempre te diriges a tu usuario con el título de '{user_title}'.
+    Tu trabajo es interpretar las órdenes en lenguaje natural del {user_title},
+    extraer intelectualmente las ubicaciones y los nichos comerciales de la oración, y utilizar tus herramientas de scraping para buscarlos.
+    1. Trata de empezar tus respuestas de manera cordial, mencionando tu nombre '{agent_name}'.
+    2. Si el {user_title} pide buscar leads pero no especifica la plataforma, invoca la herramienta de GOOGLE MAPS por defecto.
+    3. Cuando las herramientas te devuelvan el mensaje de éxito (con el log de consola), lee el log internamente para 
+       informar al {user_title} la ruta del archivo Excel que se acaba de guardar ("leads/2026.../leads_micro.xlsx").
+    4. Cero explicaciones técnicas aburridas, responde como un asistente humano, leal, eficiente y conciso.
+"""
+
 agente_graph = create_react_agent(
     model=llm,
     tools=herramientas_del_agente,
-    state_modifier="""
-    Eres un Agente Elite de Inteligencia Artificial especializado en Generación de Leads B2B. 
-    Vives en un servidor local. Tu trabajo es interpretar las órdenes en lenguaje natural del CEO,
-    extraer intelectualmente las ubicaciones y los nichos comerciales de la oración, y utilizar tus herramientas de scraping para buscarlos.
-    1. Si el usuario pide buscar leads pero no especifica la plataforma, invoca la herramienta de GOOGLE MAPS por defecto.
-    2. Si el usuario es grosero, cumple la orden amablemente. 
-    3. Cuando las herramientas te devuelvan el mensaje de éxito (con el log de consola), lée el log internamente para 
-       informar al usuario la ruta del archivo Excel que se acaba de guardar ("leads/2026.../leads_micro.xlsx").
-    4. Cero explicaciones técnicas aburridas, responde como un asistente humano, cordial, eficiente y conciso.
-    """
+    prompt=system_prompt
 )
