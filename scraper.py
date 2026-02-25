@@ -7,6 +7,7 @@ import time
 import re
 import json
 import sys
+import argparse
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -631,15 +632,24 @@ class GoogleMapsScraper:
             print(f"[ERROR] Could not save to Database: {e}")
 
 async def main():
+    parser = argparse.ArgumentParser(description="Google Maps Leads Scraper")
+    parser.add_argument('--zones', type=str, help="Zones/cities separated by semicolon")
+    parser.add_argument('--categories', type=str, help="Categories separated by semicolon")
+    args = parser.parse_args()
+
     print("Welcome to the Google Maps Leads Scraper")
     print("----------------------------------------")
     
-    # User Input
-    print("Enter the zones/cities (separated by semicolon). Example: Monterrey; Santiago, Nuevo Leon")
-    zones_input = input("Zones: ")
-    
-    print("Enter the categories (separated by semicolon). Example: Tiendas de abarrotes; Farmacias")
-    cats_input = input("Categories: ")
+    if args.zones and args.categories:
+        zones_input = args.zones
+        cats_input = args.categories
+    else:
+        # User Input
+        print("Enter the zones/cities (separated by semicolon). Example: Monterrey; Santiago, Nuevo Leon")
+        zones_input = input("Zones: ")
+        
+        print("Enter the categories (separated by semicolon). Example: Tiendas de abarrotes; Farmacias")
+        cats_input = input("Categories: ")
     
     # Process inputs
     zones = [z.strip() for z in zones_input.split(";") if z.strip()]
