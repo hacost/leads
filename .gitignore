@@ -36,3 +36,5 @@ secrets.json
 
 # --- Notebooks (Si usas Jupyter para probar los agentes) ---
 .ipynb_checkpoints/
+
+.langgraph_api/
