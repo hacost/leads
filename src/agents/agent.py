@@ -3,6 +3,7 @@ import subprocess
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
+from langchain_core.runnables.config import RunnableConfig
 
 # ==========================================
 # 1. DEFINICIÓN DE HERRAMIENTAS (TOOLS)
@@ -13,15 +14,15 @@ from langgraph.prebuilt import create_react_agent
 # para entender CUÁNDO debe usar esta herramienta, QUÉ hace y CÓMO debe pasarle los parámetros.
 
 @tool
-def ejecutar_scraper_google_maps(zonas: str, categorias: str, thread_id: str) -> str:
+def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableConfig) -> str:
     """
     Usa esta herramienta cuando el usuario pida buscar leads, negocios, tiendas o empresas 
     usando Google Maps. 
-    Acepta tres parámetros como string:
+    Acepta dos parámetros como string:
     - zonas: Las ciudades o municipios separados por punto y coma (ej. "Monterrey; San Pedro").
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
-    - thread_id: El identificador único de la conversación (proporcionado automáticamente).
     """
+    thread_id = config.get("configurable", {}).get("thread_id", "default")
     print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Google Maps scraper.")
     print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
     
@@ -44,15 +45,15 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, thread_id: str) ->
         return f"Error ejecutando scraper de Maps: {e.stderr}"
 
 @tool
-def ejecutar_scraper_facebook(zonas: str, categorias: str, thread_id: str) -> str:
+def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfig) -> str:
     """
     Usa esta herramienta cuando el usuario pida buscar leads o negocios ESPECÍFICAMENTE en Facebook,
     o cuando pida buscar directamente perfiles de redes sociales.
-    Acepta tres parámetros:
+    Acepta dos parámetros:
     - zonas: Las ciudades o municipios separados por punto y coma (ej. "Monterrey; San Pedro").
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
-    - thread_id: El identificador único de la conversación (proporcionado automáticamente).
     """
+    thread_id = config.get("configurable", {}).get("thread_id", "default")
     print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Facebook scraper.")
     print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
     
