@@ -1,77 +1,8 @@
 import os
-import subprocess
-from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.prebuilt import create_react_agent
-from langchain_core.runnables.config import RunnableConfig
+from src.core.tools_registry import ejecutar_scraper_google_maps, ejecutar_scraper_facebook
 
 # ==========================================
-# 1. DEFINICIÓN DE HERRAMIENTAS (TOOLS)
-# ==========================================
-# Las herramientas son funciones de Python programadas para que el LLM las utilice.
-# El decorador @tool convierte esta función normal en una "herramienta" que Gemini puede entender e invocar.
-# El "docstring" (el texto entre comillas triples) es CRÍTICO: El modelo lee este texto
-# para entender CUÁNDO debe usar esta herramienta, QUÉ hace y CÓMO debe pasarle los parámetros.
-
-@tool
-def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableConfig) -> str:
-    """
-    Usa esta herramienta cuando el usuario pida buscar leads, negocios, tiendas o empresas 
-    usando Google Maps. 
-    Acepta dos parámetros como string:
-    - zonas: Las ciudades o municipios separados por punto y coma (ej. "Monterrey; San Pedro").
-    - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
-    """
-    thread_id = config.get("configurable", {}).get("thread_id", "default")
-    print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Google Maps scraper.")
-    print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
-    
-    # Construimos el comando igual que si lo escribiéramos en la terminal con uv run
-    comando = [
-        "uv", "run", "src/scrapers/scraper.py", 
-        "--zones", zonas, 
-        "--categories", categorias,
-        "--output-dir", f"leads/session_{thread_id}"
-    ]
-    
-    # subprocess.run ejecuta el comando de forma "aislada" en la consola del sistema.
-    # capture_output=True significa que el Agente "lee" todo lo que el script imprime en la consola.
-    try:
-        resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        # Se regresan al modelo los últimos caracteres del log de consola para confirmar el éxito y ubicación.
-        return f"Éxito: El scraper de Maps finalizó. Log final de consola:\n{resultado.stdout[-500:]}"
-    except subprocess.CalledProcessError as e:
-        # Si la consola truena, Gemini recibe el error y puede decidir disculparse o reintentar.
-        return f"Error ejecutando scraper de Maps: {e.stderr}"
-
-@tool
-def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfig) -> str:
-    """
-    Usa esta herramienta cuando el usuario pida buscar leads o negocios ESPECÍFICAMENTE en Facebook,
-    o cuando pida buscar directamente perfiles de redes sociales.
-    Acepta dos parámetros:
-    - zonas: Las ciudades o municipios separados por punto y coma (ej. "Monterrey; San Pedro").
-    - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
-    """
-    thread_id = config.get("configurable", {}).get("thread_id", "default")
-    print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Facebook scraper.")
-    print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
-    
-    comando = [
-        "uv", "run", "src/scrapers/facebook_search_scraper.py", 
-        "--zones", zonas, 
-        "--categories", categorias,
-        "--output-dir", f"leads/session_{thread_id}"
-    ]
-    try:
-        resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        return f"Éxito: El scraper de Facebook finalizó. Log final de consola:\n{resultado.stdout[-500:]}"
-    except subprocess.CalledProcessError as e:
-        return f"Error ejecutando scraper de Facebook: {e.stderr}"
-
-
-# ==========================================
-# 2. DEFINICIÓN DEL "CEREBRO" (LLM)
+# 1. DEFINICIÓN DEL "CEREBRO" (LLM)
 # ==========================================
 # Leemos el archivo .env para cargar las llaves secretas
 import os
@@ -99,7 +30,7 @@ herramientas_del_agente = [ejecutar_scraper_google_maps, ejecutar_scraper_facebo
 
 
 # ==========================================
-# 3. CREACIÓN DEL AGENTE (EL GRAFO)
+# 2. CREACIÓN DEL AGENTE (EL GRAFO)
 # ==========================================
 # En LangGraph moderno, "create_react_agent" es un atajo (wrapper) que hace toda la magia de los grafos por nosotros.
 # Toma el cerebro (llm) y le da acceso a las manos (las tools de la lista).
