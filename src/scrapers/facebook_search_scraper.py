@@ -11,10 +11,10 @@ if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 class FacebookSearchScraper:
-    def __init__(self, output_dir=None):
+    def __init__(self, session_id=None):
         self.results = []
         self.seen_urls = set()
-        self.output_dir = output_dir
+        self.session_id = session_id
         
     def clean_phone(self, p):
         if pd.isna(p) or p == "N/A" or not str(p).strip():
@@ -242,23 +242,15 @@ class FacebookSearchScraper:
         if len(df) < initial_len:
             print(f"  [INFO] Filtered out {initial_len - len(df)} duplicate leads before saving.")
         
-        if self.output_dir:
-            output_dir = self.output_dir
-        else:
-            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-            output_dir = os.path.join("leads", timestamp)
-            
-        os.makedirs(output_dir, exist_ok=True)
-        
-        file_path = os.path.join(output_dir, "facebook_direct_leads.xlsx")
-        df.to_excel(file_path, index=False)
-        print(f"\n[SUCCESS] Exported {len(df)} Facebook leads to {file_path}")
+        from src.services.storage_service import StorageService
+        file_path = StorageService.guardar_excel(df, self.session_id, "facebook_direct_leads.xlsx")
+        print(f"\n[SUCCESS] Exported {len(df)} Facebook leads a través de StorageService en {file_path}")
 
 async def main():
     parser = argparse.ArgumentParser(description="Facebook Direct Search Scraper")
     parser.add_argument('--zones', type=str, help="Zones/cities separated by semicolon")
     parser.add_argument('--categories', type=str, help="Categories separated by semicolon")
-    parser.add_argument('--output-dir', type=str, help="Directory to save the results")
+    parser.add_argument('--session-id', type=str, help="Session ID to save the results")
     args = parser.parse_args()
 
     print("Welcome to the Facebook Direct Search Scraper")
@@ -280,7 +272,7 @@ async def main():
         print("Error: Provide at least one zone and category.")
         return
         
-    scraper = FacebookSearchScraper(output_dir=args.output_dir)
+    scraper = FacebookSearchScraper(session_id=args.session_id)
     await scraper.run(categories, zones)
 
 if __name__ == "__main__":
