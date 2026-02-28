@@ -24,10 +24,10 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
     
     # Construimos el comando igual que si lo escribiéramos en la terminal con uv run
     comando = [
-        "uv", "run", "src/scrapers/scraper.py", 
+        "uv", "run", "python", "-m", "src.scrapers.scraper", 
         "--zones", zonas, 
         "--categories", categorias,
-        "--output-dir", f"leads/session_{thread_id}"
+        "--session-id", thread_id
     ]
     
     # subprocess.run ejecuta el comando de forma "aislada" en la consola del sistema.
@@ -51,10 +51,10 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfi
     print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
     
     comando = [
-        "uv", "run", "src/scrapers/facebook_search_scraper.py", 
+        "uv", "run", "python", "-m", "src.scrapers.facebook_search_scraper", 
         "--zones", zonas, 
         "--categories", categorias,
-        "--output-dir", f"leads/session_{thread_id}"
+        "--session-id", thread_id
     ]
     try:
         resultado = subprocess.run(comando, capture_output=True, text=True, check=True)

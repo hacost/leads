@@ -58,6 +58,10 @@ async def enviar_resultados(chat_id: int, context: ContextTypes.DEFAULT_TYPE, me
         # Le pedimos al storage service que nos dé el archivo
         with StorageService.obtener_stream_archivo(excel) as document:
             await context.bot.send_document(chat_id=chat_id, document=document)
+            
+    # Limpiamos la carpeta después de enviar todo para que búsquedas fallidas futuras no envíen estos archivos
+    if resultado.get("archivos_excel"):
+        StorageService.eliminar_sesion(str(chat_id))
 
 async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
