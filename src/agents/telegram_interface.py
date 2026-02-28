@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from langchain_core.messages import HumanMessage
+import tempfile
+from openai import AsyncOpenAI
 
 # Importamos nuestro "cerebro" (el Grafo de LangGraph)
 from src.agents.agent import agente_graph
@@ -81,7 +83,81 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mensaje_estado = await update.message.reply_text("🤔 Analizando petición y ejecutando herramientas...")
     
     try:
-        # 2. Invocamos a LangGraph
+        # 2. Invocamos a LangGraph aislando la lógica
+        await procesar_con_langgraph(texto_usuario, chat_id, update, context, mensaje_estado)
+    except Exception as e:
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=mensaje_estado.message_id,
+            text=f"Lo siento, mis circuitos fallaron: {str(e)}"
+        )
+
+async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Escucha una nota de voz, la transcribe usando OpenAI Whisper (Speech-to-Text),
+    y luego manda ese texto a LangGraph.
+    """
+    chat_id = update.message.chat_id
+    
+    if not es_usuario_permitido(chat_id):
+        await rechazar_acceso(update, chat_id)
+        return
+        
+    mensaje_estado = await update.message.reply_text("🎙️ Escuchando y transcribiendo nota de voz...")
+    
+    try:
+        # 1. Obtener y Descargar el Audio de Telegram
+        voice_file_id = update.message.voice.file_id
+        telegram_file = await context.bot.get_file(voice_file_id)
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as temp_audio:
+            temp_path = temp_audio.name
+            
+        await telegram_file.download_to_drive(temp_path)
+        print(f"   -> [INFO] Audio descargado temporalmente a {temp_path}")
+        
+        # 2. Transcribir el Audio usando OpenAI Whisper
+        # (El cliente tomará automáticamente OPENAI_API_KEY de tu .env)
+        client = AsyncOpenAI()
+        
+        with open(temp_path, "rb") as audio_file_obj:
+            transcription = await client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file_obj
+            )
+            
+        texto_usuario = transcription.text
+        
+        # 3. Limpiar el archivo temporal
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            
+        print(f"\n[🎙️ {user_title} (Voz)]: {texto_usuario}")
+        
+        # 4. Actualizar estatus visual
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=mensaje_estado.message_id,
+            text=f"🗣️ Transcripción: '{texto_usuario}'\n\n🤔 Analizando petición y ejecutando herramientas..."
+        )
+        
+        # 5. Pasar el texto extraído al Agente de LangGraph
+        await procesar_con_langgraph(texto_usuario, chat_id, update, context, mensaje_estado)
+        
+    except Exception as e:
+        print(f"❌ Error al procesar audio: {str(e)}")
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=mensaje_estado.message_id,
+            text=f"❌ Ocurrió un error al intentar procesar o transcribir el audio: {str(e)}"
+        )
+
+async def procesar_con_langgraph(texto_usuario: str, chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE, mensaje_estado):
+    """
+    Función centralizada que recibe un texto (ya sea tecleado o transcrito),
+    lo envía a LangGraph y entrega los resultados o Excels.
+    """
+    try:
         # Le pasamos el mensaje del usuario como un 'HumanMessage'.
         # El config 'thread_id' es para que el Agente recuerde el contexto de la conversación.
         config = {"configurable": {"thread_id": str(chat_id)}}
@@ -119,6 +195,7 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 respuesta_final_texto = str(respuesta_cruda)
         else:
             respuesta_final_texto = str(respuesta_cruda)
+            
         # 3. Enviamos el texto de respuesta al usuario
         await context.bot.edit_message_text(
             chat_id=chat_id,
@@ -179,10 +256,14 @@ def main():
     
     # Registramos nuestros "manejadores" (handlers)
     app.add_handler(CommandHandler("start", start_command))
+    
     # Esto le dice que capture TODOS los mensajes de texto que no sean comandos especiales
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_mensaje))
     
-    print("✅ ¡Bot listo y escuchando mensajes en Telegram! (Presiona Ctrl+C para detener)")
+    # Novedad: Capturar NOTAS DE VOZ (y audios grabados) y enrutarlos a nuestro Whisper
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, manejar_audio))
+    
+    print("✅ ¡Bot listo y escuchando mensajes (y Audios!) en Telegram! (Presiona Ctrl+C para detener)")
     
     # Arrancamos el ciclo infinito de "Long Polling"
     app.run_polling()
