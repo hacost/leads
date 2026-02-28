@@ -18,11 +18,12 @@ class GoogleMapsScraper:
     Scraper for Google Maps business listings via Playwright.
     Methods to search, scroll feed, extract details (Name, Address, Phone), and save data.
     """
-    def __init__(self, headless_override=None):
+    def __init__(self, headless_override=None, output_dir=None):
         self.results = []
         self.known_leads = {} # Cache for existing DB records: {(name, zone): data_dict}
         self.seen_names = set() # Global session cache for names
         self.seen_phones = set() # Global session cache for phones
+        self.output_dir = output_dir
         self.config = self.load_config()
         if headless_override is not None:
             self.headless = headless_override
@@ -591,8 +592,12 @@ class GoogleMapsScraper:
 
         # 5. EXPORTS (No duplicates, no missing phones in master/micro/corporate)
         
-        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-        output_dir = os.path.join("leads", timestamp)
+        if self.output_dir:
+            output_dir = self.output_dir
+        else:
+            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            output_dir = os.path.join("leads", timestamp)
+            
         os.makedirs(output_dir, exist_ok=True)
         print(f"\n📁 Saving all exported files to: {output_dir}/")
         
@@ -642,6 +647,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Google Maps Leads Scraper")
     parser.add_argument('--zones', type=str, help="Zones/cities separated by semicolon")
     parser.add_argument('--categories', type=str, help="Categories separated by semicolon")
+    parser.add_argument('--output-dir', type=str, help="Directory to save the results")
     args = parser.parse_args()
 
     print("Welcome to the Google Maps Leads Scraper")
@@ -669,7 +675,7 @@ async def main():
         return
 
     # Run Scraper
-    scraper = GoogleMapsScraper(headless_override=True if is_agent else None)
+    scraper = GoogleMapsScraper(headless_override=True if is_agent else None, output_dir=args.output_dir)
     await scraper.scrape(zones, categories)
     
     # Save Results

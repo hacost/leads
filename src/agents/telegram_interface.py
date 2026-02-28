@@ -136,16 +136,18 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if se_uso_scraper:
             print("   -> 📦 Detecté que se ejecutó un scraper. Buscando archivos Excel recientes...")
-            list_of_dirs = glob.glob('leads/*')
-            if list_of_dirs:
-                latest_dir = max(list_of_dirs, key=os.path.getctime)
-                excel_files = glob.glob(os.path.join(latest_dir, '*.xlsx'))
+            # En lugar de buscar la carpeta más reciente, buscamos la carpeta específica de este usuario
+            specific_dir = f"leads/session_{chat_id}"
+            if os.path.exists(specific_dir):
+                excel_files = glob.glob(os.path.join(specific_dir, '*.xlsx'))
                 
                 # Subimos cada archivo Excel recién creado al chat de Telegram
                 for excel in excel_files:
                     await update.message.reply_text(f"📁 Adjuntando: {os.path.basename(excel)}...")
                     with open(excel, 'rb') as document:
                         await context.bot.send_document(chat_id=chat_id, document=document)
+            else:
+                print(f"   -> ❌ No se encontró la carpeta esperada: {specific_dir}")
         else:
             print("   -> 💬 Solo fue una charla normal. No busco archivos Excel.")
                     

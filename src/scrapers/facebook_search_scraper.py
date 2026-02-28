@@ -11,9 +11,10 @@ if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 class FacebookSearchScraper:
-    def __init__(self):
+    def __init__(self, output_dir=None):
         self.results = []
         self.seen_urls = set()
+        self.output_dir = output_dir
         
     def clean_phone(self, p):
         if pd.isna(p) or p == "N/A" or not str(p).strip():
@@ -241,8 +242,12 @@ class FacebookSearchScraper:
         if len(df) < initial_len:
             print(f"  [INFO] Filtered out {initial_len - len(df)} duplicate leads before saving.")
         
-        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-        output_dir = os.path.join("leads", timestamp)
+        if self.output_dir:
+            output_dir = self.output_dir
+        else:
+            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            output_dir = os.path.join("leads", timestamp)
+            
         os.makedirs(output_dir, exist_ok=True)
         
         file_path = os.path.join(output_dir, "facebook_direct_leads.xlsx")
@@ -253,6 +258,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Facebook Direct Search Scraper")
     parser.add_argument('--zones', type=str, help="Zones/cities separated by semicolon")
     parser.add_argument('--categories', type=str, help="Categories separated by semicolon")
+    parser.add_argument('--output-dir', type=str, help="Directory to save the results")
     args = parser.parse_args()
 
     print("Welcome to the Facebook Direct Search Scraper")
@@ -274,7 +280,7 @@ async def main():
         print("Error: Provide at least one zone and category.")
         return
         
-    scraper = FacebookSearchScraper()
+    scraper = FacebookSearchScraper(output_dir=args.output_dir)
     await scraper.run(categories, zones)
 
 if __name__ == "__main__":
