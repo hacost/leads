@@ -1,4 +1,5 @@
 import os
+from langgraph.prebuilt import create_react_agent
 from src.core.tools_registry import ejecutar_scraper_google_maps, ejecutar_scraper_facebook
 
 # ==========================================
