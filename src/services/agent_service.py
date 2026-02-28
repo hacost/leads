@@ -1,7 +1,7 @@
+import json
 from langchain_core.messages import HumanMessage
 from src.agents.agent import agente_graph
-
-agent_name = os.getenv("AGENT_NAME", "Agente B2B Elite")
+from src.core.config import AGENT_NAME
 
 async def procesar_mensaje_agente(texto_usuario: str, session_id: str) -> dict:
     """
@@ -40,7 +40,7 @@ async def procesar_mensaje_agente(texto_usuario: str, session_id: str) -> dict:
     else:
         respuesta_final_texto = str(respuesta_cruda)
         
-    print(f"[🤖 {agent_name}]: {respuesta_final_texto}")
+    print(f"[🤖 {AGENT_NAME}]: {respuesta_final_texto}")
 
     # Verificar si el Agente invocó alguna de nuestras herramientas (scrapers)
     se_uso_scraper = any(

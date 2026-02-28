@@ -1,7 +1,6 @@
 import os
 import logging
 import tempfile
-from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -9,8 +8,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from src.core.security import es_usuario_permitido
 from src.services.audio_service import transcribir_audio
 from src.services.agent_service import procesar_mensaje_agente
-
-load_dotenv()
+from src.services.storage_service import StorageService
+from src.core.config import AGENT_NAME, USER_TITLE, TELEGRAM_BOT_TOKEN
 
 # Habilitamos el registro de errores (Logging)
 logging.basicConfig(
@@ -22,14 +21,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # LÓGICA DE TELEGRAM
 # ==========================================
 
-# Variables de presentación
-agent_name = os.getenv("AGENT_NAME", "Agente B2B Elite")
-user_title = os.getenv("USER_TITLE", "Jefe")
-
 async def enviar_mensaje_acceso_denegado(update: Update, chat_id: int):
     """Maneja y responde a los intentos de acceso no autorizados."""
     print(f"⚠️ INTENTO DE ACCESO BLOQUEADO. Chat ID Invalido: {chat_id}")
-    await update.message.reply_text(f"🛑 Acceso Denegado. El Chat ID ({chat_id}) no está en la lista blanca del {user_title}.")
+    await update.message.reply_text(f"🛑 Acceso Denegado. El Chat ID ({chat_id}) no está en la lista blanca del {USER_TITLE}.")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Responde al comando /start en Telegram."""
@@ -40,7 +35,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     bienvenida = (
-        f"¡Hola {user_title}! Soy '{agent_name}'.\n\n"
+        f"¡Hola {USER_TITLE}! Soy '{AGENT_NAME}'.\n\n"
         "Puedo buscar empresas en Google Maps o Facebook.\n"
         "Solo dime algo como: 'Búscame dentistas en San Pedro Garza Garcia'."
     )
@@ -57,8 +52,11 @@ async def enviar_resultados(chat_id: int, context: ContextTypes.DEFAULT_TYPE, me
         text=resultado["respuesta_texto"]
     )
     for excel in resultado.get("archivos_excel", []):
-        await context.bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {os.path.basename(excel)}...")
-        with open(excel, 'rb') as document:
+        nombre = StorageService.obtener_nombre_archivo(excel)
+        await context.bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {nombre}...")
+        
+        # Le pedimos al storage service que nos dé el archivo
+        with StorageService.obtener_stream_archivo(excel) as document:
             await context.bot.send_document(chat_id=chat_id, document=document)
 
 async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,7 +72,7 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     # Se imprime en la consola del sistema el mensaje del usuario
-    print(f"\n[👤 {user_title}]: {texto_usuario}")
+    print(f"\n[👤 {USER_TITLE}]: {texto_usuario}")
     
     # 1. Avisamos que el Agente está pensando...
     mensaje_estado = await update.message.reply_text("🤔 Analizando petición y ejecutando herramientas...")
@@ -119,7 +117,7 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(temp_path):
             os.remove(temp_path)
             
-        print(f"\n[🎙️ {user_title} (Voz)]: {texto_usuario}")
+        print(f"\n[🎙️ {USER_TITLE} (Voz)]: {texto_usuario}")
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=mensaje_estado.message_id,
@@ -143,14 +141,13 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 def main():
     """Función principal que enciende el servidor de Telegram."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not token:
+    if not TELEGRAM_BOT_TOKEN:
         print("❌ CRÍTICO: No encontré TELEGRAM_BOT_TOKEN en el archivo .env")
         return
         
     print("🤖 Encendiendo Agente y conectando con Telegram...")
     # Construimos la aplicación de Telegram
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     # Registramos nuestros "manejadores" (handlers)
     app.add_handler(CommandHandler("start", start_command))

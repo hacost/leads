@@ -1,11 +1,8 @@
-import os
+from src.core.config import ALLOWED_CHAT_IDS
 
 # ==========================================
 # SEGURIDAD Y CONTROL DE ACCESO
 # ==========================================
-# Leemos los IDs permitidos desde el .env.
-allowed_chats_env = os.getenv("ALLOWED_CHAT_IDS", "")
-ALLOWED_CHAT_IDS = [int(cid.strip()) for cid in allowed_chats_env.split(",")] if allowed_chats_env else []
 
 def es_usuario_permitido(user_id: int) -> bool:
     """Valida si el user_id tiene permiso de usar el sistema."""
