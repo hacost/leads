@@ -116,13 +116,20 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await telegram_file.download_to_drive(temp_path)
         print(f"   -> [INFO] Audio descargado temporalmente a {temp_path}")
         
-        # 2. Transcribir el Audio usando OpenAI Whisper
-        # (El cliente tomará automáticamente OPENAI_API_KEY de tu .env)
-        client = AsyncOpenAI()
+        # 2. Transcribir el Audio usando la API gratuita de Groq (modelo Whisper)
+        # Requiere GROQ_API_KEY en tu archivo .env
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if not groq_api_key:
+            raise ValueError("No se encontró GROQ_API_KEY en el archivo .env. Por favor, crea una en console.groq.com")
+
+        client = AsyncOpenAI(
+            api_key=groq_api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
         
         with open(temp_path, "rb") as audio_file_obj:
             transcription = await client.audio.transcriptions.create(
-                model="whisper-1", 
+                model="whisper-large-v3", 
                 file=audio_file_obj
             )
             
