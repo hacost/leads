@@ -7,47 +7,48 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from langchain_core.messages import HumanMessage
 
-# Graph Import
+# Importamos nuestro "cerebro" (el Grafo de LangGraph)
 from src.agents.agent import agente_graph
 
 load_dotenv()
 
-# Configure logging
+# Habilitamos el registro de errores (Logging) para ver qué pasa "tras bambalinas" en Telegram
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-# Reduce logging noise from standard HTTP layers
+# Reducimos el ruido de las peticiones HTTP normales
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ==========================================
-# ACCESS CONTROL
+# SEGURIDAD Y CONTROL DE ACCESO
 # ==========================================
-# Read allowed Telegram Chat IDs from environment variables.
-# If empty, validation passes for any ID.
+# Leemos los IDs de Telegram permitidos desde el .env.
+# Si está vacío, cualquiera puede usar el bot. Si tiene IDs, solo ellos podrán.
+# Ejemplo en el .env: ALLOWED_CHAT_IDS="1234567,9876543"
 allowed_chats_env = os.getenv("ALLOWED_CHAT_IDS", "")
 ALLOWED_CHAT_IDS = [int(cid.strip()) for cid in allowed_chats_env.split(",")] if allowed_chats_env else []
 
 def es_usuario_permitido(chat_id: int) -> bool:
-    """Validates if the provided chat_id has permission to access the bot."""
+    """Valida si el chat_id tiene permiso de usar el bot."""
     if not ALLOWED_CHAT_IDS:
-        return True # Default to open access if no whitelist is specified.
+        return True # Si no hay lista blanca, todo el mundo pasa.
     return chat_id in ALLOWED_CHAT_IDS
 
 # ==========================================
-# TELEGRAM EVENT HANDLERS
+# LÓGICA DE TELEGRAM
 # ==========================================
 
-# Load prompt context
-agent_name = os.getenv("AGENT_NAME", "B2B Agent")
-user_title = os.getenv("USER_TITLE", "User")
+# Leemos las opciones del .env
+agent_name = os.getenv("AGENT_NAME", "Agente B2B Elite")
+user_title = os.getenv("USER_TITLE", "Jefe")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the /start command execution in Telegram."""
+    """Responde al comando /start en Telegram."""
     chat_id = update.message.chat_id
     
     if not es_usuario_permitido(chat_id):
-        print(f"[AUTH DENIED] Invalid Chat ID attempt: {chat_id}")
-        await update.message.reply_text(f"🛑 Access Denied. Chat ID ({chat_id}) is not authorized.")
+        print(f"⚠️ INTENTO DE ACCESO BLOQUEADO. Chat ID Invalido: {chat_id}")
+        await update.message.reply_text(f"🛑 Acceso Denegado. Chat ID no reconocido: {chat_id}. Debe compartirse con el {user_title} para obtener acceso")
         return
     
     bienvenida = (
@@ -59,29 +60,30 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Triggered when a user sends a text message.
-    Connects the Telegram input overlay with the LangGraph execution layer.
+    Esta función se dispara cada vez que un usuario escribe un mensaje en el chat.
+    Aquí se conecta Telegram con LangGraph.
     """
     texto_usuario = update.message.text
     chat_id = update.message.chat_id
     
     if not es_usuario_permitido(chat_id):
-        print(f"[AUTH DENIED] Chat ID: {chat_id} | Input: {texto_usuario}")
-        await update.message.reply_text(f"🛑 Access Denied.")
+        print(f"⚠️ INTENTO DE USO BLOQUEADO. Chat ID: {chat_id} | Mensaje: {texto_usuario}")
+        await update.message.reply_text(f"🛑 Acceso Denegado. El Chat ID ({chat_id}) no está en la lista blanca del {user_title}.")
         return
         
-    # Console Logging
-    print(f"\n[USER INPUT]: {texto_usuario}")
+    # Se imprime en la consola del sistema el mensaje del usuario
+    print(f"\n[👤 {user_title}]: {texto_usuario}")
 
-    # 1. Update UI Status
-    mensaje_estado = await update.message.reply_text("🤔 Processing request...")
+    # 1. Avisamos que el Agente está pensando...
+    mensaje_estado = await update.message.reply_text("🤔 Analizando petición y ejecutando herramientas...")
     
     try:
-        # 2. Invoke LangGraph Execution
-        # Pass the human message and associate the current chat_id to maintain conversational state.
+        # 2. Invocamos a LangGraph
+        # Le pasamos el mensaje del usuario como un 'HumanMessage'.
+        # El config 'thread_id' es para que el Agente recuerde el contexto de la conversación.
         config = {"configurable": {"thread_id": str(chat_id)}}
         
-        # Graph invocation
+        # '.invoke' ejecuta todo el ciclo del grafo (LLM -> Tool -> LLM) hasta tener la respuesta final
         respuesta_grafo = agente_graph.invoke(
             {"messages": [HumanMessage(content=texto_usuario)]},
             config=config
@@ -92,16 +94,16 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ultimo_mensaje = respuesta_grafo["messages"][-1]
         respuesta_cruda = ultimo_mensaje.content
         
-        # Display token usage stats if provided by the model provider metadata
+        # Imprimir tokens usados si están disponibles
         if hasattr(ultimo_mensaje, 'usage_metadata') and ultimo_mensaje.usage_metadata:
             tokens = ultimo_mensaje.usage_metadata
             in_tokens = tokens.get('input_tokens', 0)
             out_tokens = tokens.get('output_tokens', 0)
             total_tokens = tokens.get('total_tokens', 0)
-            print(f"   [USAGE STATS] Input Tokens: {in_tokens} | Output Tokens: {out_tokens} | Total: {total_tokens}")
+            print(f"   [🪙 TOKENS GEMINI] Entrada: {in_tokens} | Salida: {out_tokens} | Usados esta vez: {total_tokens}")
         
-        # Normalize LLM Response Format
-        # Extract text strictly as string to mitigate variations in tool/JSON serialization logic.
+        # A veces Gemini devuelve el texto como una lista de bloques JSON o un string en formato JSON raro.
+        # Vamos a limpiarlo para que sea siempre texto humano puro.
         if isinstance(respuesta_cruda, list):
             fragmentos = [item.get("text", "") for item in respuesta_cruda if isinstance(item, dict) and "text" in item]
             respuesta_final_texto = "\n".join(fragmentos)
@@ -114,70 +116,70 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 respuesta_final_texto = str(respuesta_cruda)
         else:
             respuesta_final_texto = str(respuesta_cruda)
-        # 3. Deliver text payload
+        # 3. Enviamos el texto de respuesta al usuario
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=mensaje_estado.message_id,
             text=respuesta_final_texto
         )
         
-        # Output Log Console
-        print(f"[AGENT RESPONSE]: {respuesta_final_texto}")
+        # Se imprime la respuesta en la consola
+        print(f"[🤖 {agent_name}]: {respuesta_final_texto}")
 
-        # 4. File Output Delivery
-        # Identify if any scraping action generated export files utilizing LangChain Tool Calls
+        # 4. Magia de entrega: Buscamos si el Agente generó un Excel
+        # IMPORTANTE: Solo buscaremos y enviaremos archivos si el Agente realmente ejecutó un scraper.
+        # ¿Cómo lo sabemos? Buscando si entre los mensajes de respuesta hay alguna 'tool_call' (llamada a herramienta).
         se_uso_scraper = any(
             hasattr(msg, 'tool_calls') and msg.tool_calls 
             for msg in respuesta_grafo["messages"]
         )
 
         if se_uso_scraper:
-            print("   -> [INFO] Scraper tool identified in action queue. Fetching relevant files directory...")
-            # Fetch directory by established session pattern
+            print("   -> 📦 Detecté que se ejecutó un scraper. Buscando archivos Excel recientes...")
+            # En lugar de buscar la carpeta más reciente, buscamos la carpeta específica de este usuario
             specific_dir = f"leads/session_{chat_id}"
             if os.path.exists(specific_dir):
                 excel_files = glob.glob(os.path.join(specific_dir, '*.xlsx'))
                 
-                # Upload successfully generated datasets
+                # Subimos cada archivo Excel recién creado al chat de Telegram
                 for excel in excel_files:
-                    await update.message.reply_text(f"📁 Attaching result: {os.path.basename(excel)}...")
+                    await update.message.reply_text(f"📁 Adjuntando: {os.path.basename(excel)}...")
                     with open(excel, 'rb') as document:
                         await context.bot.send_document(chat_id=chat_id, document=document)
             else:
-                print(f"   -> [WARNING] Output directory not found: {specific_dir}")
+                print(f"   -> ❌ No se encontró la carpeta esperada: {specific_dir}")
         else:
-            print("   -> [INFO] Interaction did not require file dataset dispatch.")
+            print("   -> 💬 Solo fue una charla normal. No busco archivos Excel.")
                     
     except Exception as e:
-        # Error fallback UI update
+        # Si ocurre un error (llaves incorrectas, error de red), se notifica al usuario.
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=mensaje_estado.message_id,
-            text=f"Encountered an execution error: {str(e)}"
+            text=f"Lo siento, mis circuitos fallaron: {str(e)}"
         )
 
 # ==========================================
-# BOT DAEMON INITIALIZATION
+# ARRANQUE DEL BOT
 # ==========================================
 def main():
-    """Initializes and runs the main Telegram daemon server."""
+    """Función principal que enciende el servidor de Telegram."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        print("[CRITICAL] TELEGRAM_BOT_TOKEN environment variable is undefined.")
+        print("❌ CRÍTICO: No encontré TELEGRAM_BOT_TOKEN en el archivo .env")
         return
         
-    print("[SYSTEM] Starting Agent UI interface daemon...")
+    print("🤖 Encendiendo Agente y conectando con Telegram...")
     
-    # Init application engine
+    # Construimos la aplicación de Telegram
     app = Application.builder().token(token).build()
     
-    # Map command routers
+    # Registramos nuestros "manejadores" (handlers)
     app.add_handler(CommandHandler("start", start_command))
-    
-    # Map message routers
+    # Esto le dice que capture TODOS los mensajes de texto que no sean comandos especiales
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_mensaje))
     
-    print("[SYSTEM] Instance online. Telegram Polling bound...")
+    print("✅ ¡Bot listo y escuchando mensajes en Telegram! (Presiona Ctrl+C para detener)")
     
     # Arrancamos el ciclo infinito de "Long Polling"
     app.run_polling()

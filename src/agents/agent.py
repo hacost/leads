@@ -5,11 +5,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 
 # ==========================================
-# 1. TOOL DEFINITIONS
+# 1. DEFINICIÓN DE HERRAMIENTAS (TOOLS)
 # ==========================================
-# Tools are Python functions exposed to the LLM.
-# The @tool decorator registers the function as a callable tool for LangGraph.
-# Docstrings are strictly used by the LLM to understand context, required parameters, and execution triggers.
+# Las herramientas son funciones de Python programadas para que el LLM las utilice.
+# El decorador @tool convierte esta función normal en una "herramienta" que Gemini puede entender e invocar.
+# El "docstring" (el texto entre comillas triples) es CRÍTICO: El modelo lee este texto
+# para entender CUÁNDO debe usar esta herramienta, QUÉ hace y CÓMO debe pasarle los parámetros.
 
 @tool
 def ejecutar_scraper_google_maps(zonas: str, categorias: str, thread_id: str) -> str:
@@ -21,10 +22,10 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, thread_id: str) ->
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
     - thread_id: El identificador único de la conversación (proporcionado automáticamente).
     """
-    print(f"\n[INFO] Executing Tool: Google Maps Scraper")
-    print(f"       Parameters: Zones={zonas} | Categories={categorias}")
+    print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Google Maps scraper.")
+    print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
     
-    # Build command for subprocess execution
+    # Construimos el comando igual que si lo escribiéramos en la terminal con uv run
     comando = [
         "uv", "run", "src/scrapers/scraper.py", 
         "--zones", zonas, 
@@ -32,14 +33,15 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, thread_id: str) ->
         "--output-dir", f"leads/session_{thread_id}"
     ]
     
-    # Execute the command in an isolated subprocess.
+    # subprocess.run ejecuta el comando de forma "aislada" en la consola del sistema.
+    # capture_output=True significa que el Agente "lee" todo lo que el script imprime en la consola.
     try:
         resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        # Return tail of standard output to the LLM to confirm successful execution and file paths.
-        return f"Success: Google Maps scraper completed. Final console output:\n{resultado.stdout[-500:]}"
+        # Se regresan al modelo los últimos caracteres del log de consola para confirmar el éxito y ubicación.
+        return f"Éxito: El scraper de Maps finalizó. Log final de consola:\n{resultado.stdout[-500:]}"
     except subprocess.CalledProcessError as e:
-        # Return standard error to the LLM for context on failures.
-        return f"Error executing Google Maps scraper: {e.stderr}"
+        # Si la consola truena, Gemini recibe el error y puede decidir disculparse o reintentar.
+        return f"Error ejecutando scraper de Maps: {e.stderr}"
 
 @tool
 def ejecutar_scraper_facebook(zonas: str, categorias: str, thread_id: str) -> str:
@@ -51,8 +53,8 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, thread_id: str) -> st
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
     - thread_id: El identificador único de la conversación (proporcionado automáticamente).
     """
-    print(f"\n[INFO] Executing Tool: Facebook Scraper")
-    print(f"       Parameters: Zones={zonas} | Categories={categorias}")
+    print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Facebook scraper.")
+    print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
     
     comando = [
         "uv", "run", "src/scrapers/facebook_search_scraper.py", 
@@ -62,56 +64,64 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, thread_id: str) -> st
     ]
     try:
         resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        return f"Success: Facebook scraper completed. Final console output:\n{resultado.stdout[-500:]}"
+        return f"Éxito: El scraper de Facebook finalizó. Log final de consola:\n{resultado.stdout[-500:]}"
     except subprocess.CalledProcessError as e:
-        return f"Error executing Facebook scraper: {e.stderr}"
+        return f"Error ejecutando scraper de Facebook: {e.stderr}"
 
 
 # ==========================================
-# 2. LLM CONFIGURATION
+# 2. DEFINICIÓN DEL "CEREBRO" (LLM)
 # ==========================================
+# Leemos el archivo .env para cargar las llaves secretas
 import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Select LLM back-end
+# Magia Multi-Modelo: Leemos qué IA quieres usar. Si no pones nada, usa Gemini.
 modelo_elegido = os.getenv("LLM_MODEL", "gemini").lower()
 
 if modelo_elegido == "claude":
+    # Si quieres usar Claude, asegúrate de tener ANTHROPIC_API_KEY en tu .env
     from langchain_anthropic import ChatAnthropic
     llm = ChatAnthropic(model_name="claude-3-5-sonnet-latest", temperature=0)
 elif modelo_elegido == "gpt":
+    # Si quieres usar ChatGPT, asegúrate de tener OPENAI_API_KEY en tu .env
     from langchain_openai import ChatOpenAI
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
 else:
-    # Default to Gemini
+    # Gemini (Por defecto)
     from langchain_google_genai import ChatGoogleGenerativeAI
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
-# Register defined tools
+# Empaquetamos nuestras herramientas en una lista de Python
 herramientas_del_agente = [ejecutar_scraper_google_maps, ejecutar_scraper_facebook]
 
 
 # ==========================================
-# 3. AGENT GRAPH INITIALIZATION
+# 3. CREACIÓN DEL AGENTE (EL GRAFO)
 # ==========================================
-# create_react_agent is used to orchestrate the ReAct (Reasoning and Acting) execution loop.
-# It handles dynamic tool dispatching.
+# En LangGraph moderno, "create_react_agent" es un atajo (wrapper) que hace toda la magia de los grafos por nosotros.
+# Toma el cerebro (llm) y le da acceso a las manos (las tools de la lista).
+# Internamente construye un Grafo con un ciclo que dice:
+#   1. Llamar al LLM (El LLM ve si necesita usar una tool o si ya puede responder).
+#   2. Si decide usar una tool, llama al Nodo de Herramientas.
+#   3. El nodo de Herramientas ejecuta la función de Python (ej. subprocess) y devuelve el texto.
+#   4. Le regresa el texto al LLM. El ciclo inicia de nuevo hasta que el LLM decide que ya tiene la respuesta.
 
-# Load environment personalization
-agent_name = os.getenv("AGENT_NAME", "B2B Agent")
-user_title = os.getenv("USER_TITLE", "User")
+# Leemos las variables de personalización
+agent_name = os.getenv("AGENT_NAME", "Agente Elite B2B")
+user_title = os.getenv("USER_TITLE", "CEO")
 
 system_prompt = f"""
     Eres '{agent_name}', una Inteligencia Artificial especializada en Generación de Leads B2B. 
-    Ejecutas tareas desde un servidor local y te comunicas formalmente utilizando el título '{user_title}'.
-    El objetivo principal es interpretar requerimientos en lenguaje natural,
-    extraer ubicaciones y nichos comerciales, y emplear las herramientas de scraping disponibles para su búsqueda.
-    1. Iniciar las interacciones de manera cordial, mencionando el identificador '{agent_name}'.
-    2. Si no se especifica explícitamente la plataforma de búsqueda en la instrucción, invocar la herramienta de GOOGLE MAPS por defecto.
-    3. Al confirmar el éxito de la ejecución (vía lectura de logs de consola),
-       informar al usuario la ruta exacta del archivo Excel generado.
-    4. Mantener un estilo de comunicación profesional, directo, eficiente y conciso, evitando tecnicismos innecesarios.
+    Operas en un servidor local y siempre te diriges al usuario con el título de '{user_title}'.
+    El objetivo es interpretar las instrucciones en lenguaje natural del {user_title},
+    extraer intelectualmente las ubicaciones y los nichos comerciales de la oración, y utilizar las herramientas de scraping disponibles para buscarlos.
+    1. Tratar de empezar las respuestas de manera cordial, mencionando el nombre '{agent_name}'.
+    2. Si el {user_title} pide buscar leads pero no especifica la plataforma, invocar la herramienta de GOOGLE MAPS por defecto.
+    3. Cuando las herramientas devuelvan el mensaje de éxito (con el log de consola), leer el log internamente para 
+       informar al {user_title} la ruta del archivo Excel que se acaba de guardar.
+    4. Cero explicaciones técnicas aburridas, responder como un asistente humano, eficiente y conciso.
 """
 
 agente_graph = create_react_agent(
