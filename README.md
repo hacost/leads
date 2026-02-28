@@ -25,6 +25,8 @@ A partir de Febrero 2026, el proyecto fue refactorizado siguiendo los principios
 
 *   **Notas de Voz (Whisper 3)**: Puedes enviarle audios al Bot de Telegram. Utiliza la API de Groq + Whisper-large-v3 para transcribir instantáneamente lo que pides.
 *   **Agente Inteligente (LangGraph)**: El "Cerebro" del sistema decide qué herramienta de scraping utilizar basado en tu petición usando Python ReAct agents.
+*   **Google Maps Scraping**: Extrae nombres, direcciones, teléfonos, sitios web, calificaciones y cantidad exacta de reseñas comerciales.
+*   **Enriquecimiento con Facebook**: Una segunda herramienta que busca en Facebook para recuperar teléfonos o correos faltantes de tus prospectos extraídos. Analiza perfiles y hasta los últimos 3 posts buscando números o enlaces `wa.me`.
 *   **Aislamiento de Sesiones**: Los archivos generados no se cruzan entre usuarios de Telegram. Si falla una búsqueda, la carpeta de sesión se limpia sola para no mandar "archivos fantasma".
 *   **Inteligencia y Caché (SQLite)**: Una base de datos local (`leads.db`) guarda los prospectos ya extraídos. Al buscar nuevamente, reutiliza los datos existentes de búsquedas exactas para ahorrar tiempo.
 *   **Segmentación Automática**: Clasifica y separa automáticamente a los leads válidos en diferentes archivos de Excel (Micro vs Corporate).
@@ -35,7 +37,8 @@ A partir de Febrero 2026, el proyecto fue refactorizado siguiendo los principios
 
 1.  `leads_corporate.xlsx`: Negocios con muchas reseñas o cadenas grandes.
 2.  `leads_micro.xlsx`: Negocios pequeños o nuevos con pocas reseñas; estos son el "Target B2B" principal de esta herramienta.
-3.  `leads_google_maps.xlsx`: La lista maestra consolidada.
+3.  `leads_google_maps.xlsx`: La La lista maestra de TODOS los leads extraídos con un teléfono válido a 10 dígitos.
+4.  `leads_pending_lookup.xlsx`: Leads extraídos pero *sin* teléfono válido. Éstos pueden ser reprocesados por la herramienta de Facebook.
 
 ---
 
@@ -48,15 +51,37 @@ Debes crear un archivo `.env` en la raíz del proyecto para conectar las APIs y 
 LLM_MODEL=gemini # Opciones: gemini, claude, gpt
 GOOGLE_API_KEY=tu_api_key_de_gemini
 GROQ_API_KEY=tu_api_key_de_groq_para_audios
+# ANTHROPIC_API_KEY=... (si usas Claude)
+# OPENAI_API_KEY=... (si usas ChatGPT)
 
 # Configuración de Telegram
-TELEGRAM_BOT_TOKEN=el_token_de_tu_bot
+TELEGRAM_BOT_TOKEN=el_token_de_tu_bot_proveído_por_BotFather
 ALLOWED_CHAT_IDS=123456789,987654321 # Lista blanca
 
 # Personalización del Agente
 AGENT_NAME="Agente Elite B2B"
 USER_TITLE="CEO"
 ```
+
+### 2. Reglas del Scraping (`config.json`)
+Puedes personalizar las reglas de segmentación sin tocar código Python. Modifica el archivo `config.json` en la raíz:
+
+```json
+{
+  "segmentation": {
+    "micro_max_reviews": 20,
+    "good_rating_threshold": 3.5
+  },
+  "search": {
+    "max_scroll_attempts": 5,
+    "wait_between_actions_ms": 3000,
+    "headless": false
+  }
+}
+```
+
+*   `micro_max_reviews`: Negocios con estas reseñas o menos se clasifican como "Micro".
+*   `headless`: Si es `true`, los navegadores (Playwright) se ejecutarán en segundo plano sin abrir ventanas visibles.
 
 ## 🛠 Instalación y Uso
 
