@@ -42,13 +42,17 @@ def es_usuario_permitido(chat_id: int) -> bool:
 agent_name = os.getenv("AGENT_NAME", "Agente B2B Elite")
 user_title = os.getenv("USER_TITLE", "Jefe")
 
+async def rechazar_acceso(update: Update, chat_id: int):
+    """Maneja y responde a los intentos de acceso no autorizados."""
+    print(f"⚠️ INTENTO DE ACCESO BLOQUEADO. Chat ID Invalido: {chat_id}")
+    await update.message.reply_text(f"🛑 Acceso Denegado. El Chat ID ({chat_id}) no está en la lista blanca del {user_title}.")
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Responde al comando /start en Telegram."""
     chat_id = update.message.chat_id
     
     if not es_usuario_permitido(chat_id):
-        print(f"⚠️ INTENTO DE ACCESO BLOQUEADO. Chat ID Invalido: {chat_id}")
-        await update.message.reply_text(f"🛑 Acceso Denegado. Chat ID no reconocido: {chat_id}. Debe compartirse con el {user_title} para obtener acceso")
+        await rechazar_acceso(update, chat_id)
         return
     
     bienvenida = (
@@ -67,8 +71,7 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     
     if not es_usuario_permitido(chat_id):
-        print(f"⚠️ INTENTO DE USO BLOQUEADO. Chat ID: {chat_id} | Mensaje: {texto_usuario}")
-        await update.message.reply_text(f"🛑 Acceso Denegado. El Chat ID ({chat_id}) no está en la lista blanca del {user_title}.")
+        await rechazar_acceso(update, chat_id)
         return
         
     # Se imprime en la consola del sistema el mensaje del usuario
