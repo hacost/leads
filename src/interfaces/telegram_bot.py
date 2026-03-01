@@ -140,6 +140,14 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"❌ Ocurrió un error al intentar procesar o transcribir el audio: {str(e)}"
         )
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Maneja los errores globales para evitar tracebacks rojos que asusten al usuario."""
+    import telegram
+    if isinstance(context.error, telegram.error.NetworkError):
+        logging.warning("⚠️ [Red] Micro-corte o error 502 de Telegram. El bot está diseñado para ignorarlo y reconectarse silenciosamente en segundo plano.")
+    else:
+        logging.error("❌ Ocurrió un error inesperado en Telegram:", exc_info=context.error)
+
 # ==========================================
 # ARRANQUE DEL BOT
 # ==========================================
@@ -161,6 +169,9 @@ def main():
     
     # Novedad: Capturar NOTAS DE VOZ (y audios grabados) y enrutarlos a nuestro Whisper
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, manejar_audio))
+    
+    # Manejador Global de Errores para que los fallos de Red de Telegram no inunden tu terminal
+    app.add_error_handler(error_handler)
     
     print("✅ ¡Bot listo y escuchando mensajes (y Audios!) en Telegram! (Presiona Ctrl+C para detener)")
     
