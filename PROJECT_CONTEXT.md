@@ -36,7 +36,11 @@ Cualquier Ingeniero / Agente IA que toque este código **debe** apegarse a las s
 
 ## 4. Estado Actual (Phase 2 In-Progress)
 *   **Logrado (Fase 1):** Scraper Playwright al 100%. Módulos limpios. Bot soporta comandos de voz. Storage Service aísla la carga.
-*   **Pendiente Próxima Sesión (Fase 2 - Outreach):**
+*   **Aprobado (Fase 2 - Outreach):**
     *   Iniciar integración con WAHA (WhatsApp HTTP API) vía Docker OrbStack.
     *   Crear Agente LangGraph capaz de redactar mensajes a los "Micros" extraídos (Outreach Agent).
-    *   Enganchar HubSpot CRM para capturar automáticamente Webhooks de quienes respondan los mensajes de WAHA (Sync Agent).
+    *   Enganchar HubSpot CRM para capturar automáticamente Webhooks de WAHA (Sync Agent).
+*   **Aprobado (Fase 3 - Alexa Domótica):**
+    *   Crear `src/interfaces/alexa_api.py` (FastAPI) para recibir Webhooks HTTPS de Amazon.
+    *   Exponer puerto local con Ngrok/Cloudflare Tunnels.
+    *   Enrutar voz a `procesar_mensaje_agente()` para lanzar scrapings con comandos de voz de Alexa.
