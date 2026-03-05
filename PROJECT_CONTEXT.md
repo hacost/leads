@@ -1,4 +1,4 @@
-# PROJECT CONTEXT: Bastión Core - Leads Generation Platform
+# PROJECT CONTEXT: Bastión Core - Leads Generation
 
 ## 1. Visión Holística del Proyecto
 Este repositorio forma parte de **Bastión Core**, una startup tecnológica de México enfocada en otorgar créditos/servicios B2B al sector Micro (Ferreterías, Plomeros, Abarrotes, HORECA, etc.). 
@@ -36,11 +36,11 @@ Cualquier Ingeniero / Agente IA que toque este código **debe** apegarse a las s
 
 ## 4. Estado Actual (Phase 2 In-Progress)
 *   **Logrado (Fase 1):** Scraper Playwright al 100%. Módulos limpios. Bot soporta comandos de voz. Storage Service aísla la carga.
-*   **Aprobado (Fase 2 - Outreach):**
+*   **Aprobado (Fase 2 - Programación de Alertas y Resúmenes Autónomos):**
+    *   **Prohibido usar Cronjobs del SO.** La aplicación debe mantenerse agnóstica a la infraestructura. Integrar un planificador nativo asíncrono en Python (como `APScheduler`).
+    *   El bot de Telegram deberá despachar mensajes proactivamente a los administradores a horas predefinidas (resúmenes de prospección y métricas). Se debe permitir agregar, modificar y eliminar recordatorios dinámicamente según lo defina el usuario.
+*   **Fase 3 (Outreach y CRM):**
     *   Iniciar integración con WAHA (WhatsApp HTTP API) vía Docker OrbStack.
     *   Crear Agente LangGraph capaz de redactar mensajes a los "Micros" extraídos (Outreach Agent).
     *   Enganchar HubSpot CRM para capturar automáticamente Webhooks de WAHA (Sync Agent).
-*   **Aprobado (Fase 3 - Alexa Domótica):**
-    *   Crear `src/interfaces/alexa_api.py` (FastAPI) para recibir Webhooks HTTPS de Amazon.
-    *   Exponer puerto local con Ngrok/Cloudflare Tunnels.
-    *   Enrutar voz a `procesar_mensaje_agente()` para lanzar scrapings con comandos de voz de Alexa.
+
