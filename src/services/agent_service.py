@@ -10,8 +10,16 @@ async def procesar_mensaje_agente(texto_usuario: str, session_id: str) -> dict:
     """
     config = {"configurable": {"thread_id": str(session_id)}}
     
+    from datetime import datetime
+    import pytz
+    tz = pytz.timezone('America/Mexico_City')
+    ahora = datetime.now(tz)
+    fecha_hora_str = ahora.strftime("%Y-%m-%d %H:%M:%S")
+    
+    texto_con_contexto = f"[CONTEXTO DEL SISTEMA: La hora actual es {fecha_hora_str} en {tz.zone}. Por favor saluda usando 'Buenos días', 'Buenas tardes' o 'Buenas noches' apropiadamente. Luego atiende el siguiente mensaje del usuario.]\n\nMensaje del Usuario: {texto_usuario}"
+    
     respuesta_grafo = agente_graph.invoke(
-        {"messages": [HumanMessage(content=texto_usuario)]},
+        {"messages": [HumanMessage(content=texto_con_contexto)]},
         config=config
     )
     
