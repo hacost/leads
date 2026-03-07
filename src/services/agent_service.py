@@ -42,9 +42,9 @@ async def procesar_mensaje_agente(texto_usuario: str, session_id: str) -> dict:
         
     print(f"[🤖 {AGENT_NAME}]: {respuesta_final_texto}")
 
-    # Verificar si el Agente invocó alguna de nuestras herramientas (scrapers)
+    # Verificar si el Agente invocó alguna de nuestras herramientas de scraping
     se_uso_scraper = any(
-        hasattr(msg, 'tool_calls') and msg.tool_calls 
+        hasattr(msg, 'tool_calls') and msg.tool_calls and any(tc['name'].startswith('ejecutar_scraper') for tc in msg.tool_calls)
         for msg in respuesta_grafo["messages"]
     )
 

@@ -9,6 +9,7 @@ from src.core.security import es_usuario_permitido
 from src.services.audio_service import transcribir_audio
 from src.services.agent_service import procesar_mensaje_agente
 from src.services.storage_service import StorageService
+from src.services.scheduler_service import SchedulerService
 from src.core.config import AGENT_NAME, USER_TITLE, TELEGRAM_BOT_TOKEN
 
 # Habilitamos el registro de errores (Logging)
@@ -151,6 +152,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # ==========================================
 # ARRANQUE DEL BOT
 # ==========================================
+
+async def on_startup(app: Application):
+    """Se ejecuta una vez que el Application de Telegram arranca su event loop."""
+    from src.services.scheduler_service import SchedulerService
+    SchedulerService.iniciar(app)
+
 def main():
     """Función principal que enciende el servidor de Telegram."""
     if not TELEGRAM_BOT_TOKEN:
@@ -158,8 +165,8 @@ def main():
         return
         
     print("🤖 Encendiendo Agente y conectando con Telegram...")
-    # Construimos la aplicación de Telegram
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # Construimos la aplicación de Telegram y registramos el hook de inicio
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(on_startup).build()
     
     # Registramos nuestros "manejadores" (handlers)
     app.add_handler(CommandHandler("start", start_command))

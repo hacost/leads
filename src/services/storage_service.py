@@ -1,6 +1,28 @@
 import os
 import glob
-from typing import List
+import glob
+import sqlite3
+import json
+from typing import List, Dict, Optional
+
+DB_PATH = "data/bastion_bot.db"
+
+def _init_db():
+    os.makedirs("data", exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scheduled_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id TEXT NOT NULL,
+                cron_expression TEXT NOT NULL,
+                prompt_task TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1
+            )
+        ''')
+        conn.commit()
+
+_init_db()
 
 class StorageService:
     """
@@ -68,6 +90,49 @@ class StorageService:
             import shutil
             shutil.rmtree(specific_dir, ignore_errors=True)
             print(f"   🧹 [Limpieza] Carpeta de sesión eliminada: {specific_dir}")
+
+            print(f"   🧹 [Limpieza] Carpeta de sesión eliminada: {specific_dir}")
+
+    # ==========================================
+    # LÓGICA DE BASE DE DATOS PARA ALERTAS (PHASE 2)
+    # ==========================================
+    
+    @staticmethod
+    def guardar_alerta(chat_id: str, cron_expression: str, prompt_task: str) -> int:
+        """Guarda una nueva alerta en SQLite y devuelve su ID."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO scheduled_alerts (chat_id, cron_expression, prompt_task, is_active) VALUES (?, ?, ?, 1)",
+                (str(chat_id), cron_expression, prompt_task)
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    @staticmethod
+    def obtener_alertas(chat_id: Optional[str] = None) -> List[Dict]:
+        """Obtiene las alertas activas, opcionalmente filtradas por chat_id."""
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            if chat_id:
+                cursor.execute("SELECT * FROM scheduled_alerts WHERE is_active=1 AND chat_id=?", (str(chat_id),))
+            else:
+                cursor.execute("SELECT * FROM scheduled_alerts WHERE is_active=1")
+            
+            return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def eliminar_alerta(alerta_id: int, chat_id: Optional[str] = None) -> bool:
+        """Marca una alerta como inactiva (eliminada lógicamente). Opcionalmente verifica propiedad."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            if chat_id:
+                cursor.execute("UPDATE scheduled_alerts SET is_active=0 WHERE id=? AND chat_id=?", (alerta_id, str(chat_id)))
+            else:
+                cursor.execute("UPDATE scheduled_alerts SET is_active=0 WHERE id=?", (alerta_id,))
+            conn.commit()
+            return cursor.rowcount > 0
 
 # Puedes usar estas funciones simples importándolas directamente
 def buscar_excels_de_usuario(session_id: str) -> List[str]:
