@@ -18,6 +18,8 @@ wheels/
 leads.db
 *.xlsx
 leads/
+data/
+checkpointer.sqlite
 
 
 # --- Environment Variables (Seguridad CRÍTICA) ---
