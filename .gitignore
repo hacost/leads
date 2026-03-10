@@ -15,11 +15,13 @@ wheels/
 *.log
 
 # --- Outputs & Data ---
+*.db
 leads.db
-*.xlsx
-leads/
+bastion_bot.db
 data/
 checkpointer.sqlite
+*.xlsx
+leads/
 
 
 # --- Environment Variables (Seguridad CRÍTICA) ---
