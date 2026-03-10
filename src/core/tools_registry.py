@@ -33,7 +33,11 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
     # subprocess.run ejecuta el comando de forma "aislada" en la consola del sistema.
     try:
         resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        return f"Éxito: El scraper de Maps finalizó. Log final de consola:\n{resultado.stdout[-500:]}"
+        # Checking if zero rows were added to the DB, meaning no new results. Focus on the actual output.
+        if "0 new rows added" in resultado.stdout or "Extracted: " not in resultado.stdout:
+            return f"BÚSQUEDA FALLIDA: NO SE ENCONTRÓ NINGÚN RESULTADO válido para {categorias} en {zonas}. Por favor, informa al usuario que no obtuviste resultados. NO se generó ningún archivo."
+        else:
+            return f"Éxito. INSTRUCCIÓN ESTRICTA: Escribe ÚNICAMENTE '¡Hola {config.get('configurable', {}).get('thread_id', 'Amo')}! He terminado de buscar.' y debajo enlista SOLAMENTE LAS RUTAS de los archivos Excel generados con viñetas (bullet points) basándote en este log. ESTÁ PROHIBIDO mencionar la base de datos (leads.db), carpetas internas o dar explicaciones técnicas largas:\n{resultado.stdout[-500:]}"
     except subprocess.CalledProcessError as e:
         return f"Error ejecutando scraper de Maps: {e.stderr}"
 
@@ -63,7 +67,7 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfi
         return f"Error ejecutando scraper de Facebook: {e.stderr}"
 
 @tool
-def gestionar_recordatorio(accion: str, config: RunnableConfig, cron_expression: str = "", prompt_task: str = "", alerta_id: int = 0) -> str:
+def gestionar_recordatorio(accion: str, config: RunnableConfig, cron_expression: str = "", prompt_task: str = "", alerta_id: int | str = 0) -> str:
     """
     Usa esta herramienta cuando el usuario te pida PROGRAMAR o AGENDAR una búsqueda o resumen recurrente, 
     o cuando pida LISTAR o BORRAR un recordatorio previamente configurado.
@@ -97,6 +101,12 @@ def gestionar_recordatorio(accion: str, config: RunnableConfig, cron_expression:
         return respuesta
         
     elif accion == "borrar":
+        # Safe casting against the issue where LLM sends string '0' or '1'
+        try:
+            alerta_id = int(alerta_id)
+        except ValueError:
+            return "Error: alerta_id debe ser un número entero válido."
+            
         if alerta_id <= 0:
             return "Error: Para borrar se requiere un alerta_id válido numérico mayor a 0."
         exito = SchedulerService.eliminar_alerta(alerta_id, chat_id)
