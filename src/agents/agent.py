@@ -15,6 +15,11 @@ elif LLM_MODEL == "gpt":
     # Si quieres usar ChatGPT, asegúrate de tener OPENAI_API_KEY en tu .env
     from langchain_openai import ChatOpenAI
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
+elif LLM_MODEL == "groq":
+    # Groq Llama 3.3 (Muy rápido y gratuito)
+    # Requiere GROQ_API_KEY en .env
+    from langchain_groq import ChatGroq
+    llm = ChatGroq(model_name="llama-3.3-70b-versatile", temperature=0)
 else:
     # Gemini (Por defecto)
     from langchain_google_genai import ChatGoogleGenerativeAI

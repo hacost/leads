@@ -68,5 +68,6 @@ async def procesar_mensaje_agente(texto_usuario: str, session_id: str) -> dict:
 
     return {
         "respuesta_texto": respuesta_final_texto,
-        "archivos_excel": archivos_generados
+        "archivos_excel": archivos_generados,
+        "se_uso_scraper": se_uso_scraper
     }

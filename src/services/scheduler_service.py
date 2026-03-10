@@ -83,15 +83,17 @@ class SchedulerService:
                 text=resultado["respuesta_texto"]
             )
             
-            # Si generó Excel
-            for excel in resultado.get("archivos_excel", []):
-                nombre = StorageService.obtener_nombre_archivo(excel)
-                await bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {nombre}...")
-                with StorageService.obtener_stream_archivo(excel) as document:
-                    await bot.send_document(chat_id=chat_id, document=document)
-                    
-            if resultado.get("archivos_excel"):
-                StorageService.eliminar_sesion(chat_id)
+            # Si generó Excel verificando primero si la herramienta de scraping fue ejecutada
+            if resultado.get("se_uso_scraper", False):
+                archivos = resultado.get("archivos_excel", [])
+                for excel in archivos:
+                    nombre = StorageService.obtener_nombre_archivo(excel)
+                    await bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {nombre}...")
+                    with StorageService.obtener_stream_archivo(excel) as document:
+                        await bot.send_document(chat_id=chat_id, document=document)
+                        
+                if archivos:
+                    StorageService.eliminar_sesion(chat_id)
                 
         except Exception as e:
             await bot.edit_message_text(

@@ -52,17 +52,20 @@ async def enviar_resultados(chat_id: int, context: ContextTypes.DEFAULT_TYPE, me
         message_id=mensaje_estado.message_id,
         text=resultado["respuesta_texto"]
     )
-    for excel in resultado.get("archivos_excel", []):
-        nombre = StorageService.obtener_nombre_archivo(excel)
-        await context.bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {nombre}...")
-        
-        # Le pedimos al storage service que nos dé el archivo
-        with StorageService.obtener_stream_archivo(excel) as document:
-            await context.bot.send_document(chat_id=chat_id, document=document)
+    # Solo procesa lógica de archivos si el Agente ejecutó la herramienta de scraping
+    if resultado.get("se_uso_scraper", False):
+        archivos = resultado.get("archivos_excel", [])
+        for excel in archivos:
+            nombre = StorageService.obtener_nombre_archivo(excel)
+            await context.bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {nombre}...")
             
-    # Limpiamos la carpeta después de enviar todo para que búsquedas fallidas futuras no envíen estos archivos
-    if resultado.get("archivos_excel"):
-        StorageService.eliminar_sesion(str(chat_id))
+            # Le pedimos al storage service que nos dé el archivo
+            with StorageService.obtener_stream_archivo(excel) as document:
+                await context.bot.send_document(chat_id=chat_id, document=document)
+                
+        # Limpiamos la carpeta después de enviar todo para que búsquedas fallidas futuras no envíen estos archivos
+        if archivos:
+            StorageService.eliminar_sesion(str(chat_id))
 
 async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
