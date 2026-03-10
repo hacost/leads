@@ -42,12 +42,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(bienvenida)
 
-async def enviar_resultados(chat_id: int, context: ContextTypes.DEFAULT_TYPE, mensaje_estado, resultado: dict):
+async def enviar_resultados_al_chat(bot, chat_id: int, mensaje_estado, resultado: dict):
     """
     Función auxiliar para procesar la salida estandarizada del Agente Service.
     Envia el texto y adjunta los Excels si los hubo.
+    Lógica centralizada para respetar el principio DRY.
     """
-    await context.bot.edit_message_text(
+    await bot.edit_message_text(
         chat_id=chat_id,
         message_id=mensaje_estado.message_id,
         text=resultado["respuesta_texto"]
@@ -57,11 +58,11 @@ async def enviar_resultados(chat_id: int, context: ContextTypes.DEFAULT_TYPE, me
         archivos = resultado.get("archivos_excel", [])
         for excel in archivos:
             nombre = StorageService.obtener_nombre_archivo(excel)
-            await context.bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {nombre}...")
+            await bot.send_message(chat_id=chat_id, text=f"📁 Adjuntando: {nombre}...")
             
             # Le pedimos al storage service que nos dé el archivo
             with StorageService.obtener_stream_archivo(excel) as document:
-                await context.bot.send_document(chat_id=chat_id, document=document)
+                await bot.send_document(chat_id=chat_id, document=document)
                 
         # Limpiamos la carpeta después de enviar todo para que búsquedas fallidas futuras no envíen estos archivos
         if archivos:
@@ -86,9 +87,8 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mensaje_estado = await update.message.reply_text("🤔 Analizando petición y ejecutando herramientas...")
     
     try:
-        # Aquí Telegram SOLO funciona como mensajero. Delega el procesamiento al servicio del Agente.
         resultado = await procesar_mensaje_agente(texto_usuario, str(chat_id))
-        await enviar_resultados(chat_id, context, mensaje_estado, resultado)
+        await enviar_resultados_al_chat(context.bot, chat_id, mensaje_estado, resultado)
     except Exception as e:
         await context.bot.edit_message_text(
             chat_id=chat_id,
@@ -134,7 +134,7 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Re-usamos la misma lógica del Agente que se usa para texto
         resultado = await procesar_mensaje_agente(texto_usuario, str(chat_id))
-        await enviar_resultados(chat_id, context, mensaje_estado, resultado)
+        await enviar_resultados_al_chat(context.bot, chat_id, mensaje_estado, resultado)
         
     except Exception as e:
         print(f"❌ Error al procesar audio: {str(e)}")
