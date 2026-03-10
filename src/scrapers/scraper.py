@@ -58,7 +58,7 @@ class GoogleMapsScraper:
         """
         Loads existing leads from the database into memory to avoid re-scraping.
         """
-        db_path = 'leads.db'
+        db_path = 'data/leads.db'
         if not os.path.exists(db_path):
             return
 
@@ -423,13 +423,13 @@ class GoogleMapsScraper:
 
     def save_to_db(self):
         """
-        Saves the results to a SQLite database 'leads.db'.
+        Saves the results to a SQLite database 'data/leads.db'.
         Enforces PRIMARY KEY (name, zone) to prevent duplicates.
         """
         if not self.results:
             return
 
-        conn = sqlite3.connect('leads.db')
+        conn = sqlite3.connect('data/leads.db')
         c = conn.cursor()
         
         # Create table if not exists with PRIMARY KEY constraint
@@ -470,7 +470,7 @@ class GoogleMapsScraper:
 
         conn.commit()
         conn.close()
-        print(f"Data saved to database (leads.db) - {new_count} new rows added (duplicates ignored).")
+        print(f"Data saved to database (data/leads.db) - {new_count} new rows added (duplicates ignored).")
 
     def save_data(self):
         """
