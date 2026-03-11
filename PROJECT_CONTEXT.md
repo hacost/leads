@@ -56,7 +56,3 @@ Cualquier Ingeniero / Agente IA que toque este código **debe** apegarse a las s
     *   Enganchar HubSpot CRM para capturar Webhooks de WAHA.
 
 ---
-
-## 5. Instrucciones para Agentes de IA (CRÍTICO)
-**🚨 IMPORTANTE PARA CUALQUIER IA O AGENTE QUE LEA ESTE ARCHIVO 🚨**
-Antes de proponer, modificar o generar CUALQUIER línea de código o script en este proyecto, **ESTÁS OBLIGADO a leer el archivo `.agentrules`** ubicado en la raíz del proyecto. Este archivo contiene las directrices de nivel "Developer Senior" (SOLID, Clean Architecture, prohibición de commits automáticos) que rigen este repositorio. Ignorar el archivo `.agentrules` es una violación a las reglas fundamentales de este proyecto.
