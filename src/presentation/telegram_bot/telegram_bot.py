@@ -6,10 +6,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # Importamos las capacidades desde nuestras capas limpias (Clean Architecture)
 from src.core.security import es_usuario_permitido
-from src.services.audio_service import transcribir_audio
-from src.services.agent_service import procesar_mensaje_agente
-from src.services.storage_service import StorageService
-from src.services.scheduler_service import SchedulerService
+from src.infrastructure.audio.audio_service import transcribir_audio
+from src.application.ai_agents.agent_service import procesar_mensaje_agente
+from src.infrastructure.database.storage_service import StorageService
+from src.application.batch_jobs.scheduler_service import SchedulerService
 from src.core.config import AGENT_NAME, USER_TITLE, TELEGRAM_BOT_TOKEN
 
 # Habilitamos el registro de errores (Logging)
@@ -158,7 +158,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def on_startup(app: Application):
     """Se ejecuta una vez que el Application de Telegram arranca su event loop."""
-    from src.services.scheduler_service import SchedulerService
+    from src.application.batch_jobs.scheduler_service import SchedulerService
     SchedulerService.iniciar(app)
 
 def main():

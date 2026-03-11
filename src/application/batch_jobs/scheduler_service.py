@@ -2,8 +2,8 @@ import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from telegram.ext import Application
-from src.services.storage_service import StorageService
-from src.services.agent_service import procesar_mensaje_agente
+from src.infrastructure.database.storage_service import StorageService
+from src.application.ai_agents.agent_service import procesar_mensaje_agente
 
 class SchedulerService:
     _scheduler = AsyncIOScheduler()
@@ -77,7 +77,7 @@ class SchedulerService:
             resultado = await procesar_mensaje_agente(prompt_task, chat_id)
             
             # 3. Mandamos resultados usando la UI centralizada para cumplir con el principio DRY
-            from src.interfaces.telegram_bot import enviar_resultados_al_chat
+            from src.presentation.telegram_bot.telegram_bot import enviar_resultados_al_chat
             await enviar_resultados_al_chat(bot, chat_id, mensaje_estado, resultado)
                 
         except Exception as e:

@@ -27,20 +27,27 @@ Cualquier Ingeniero / Agente IA que toque este código **debe** apegarse a las s
 ## 3. Tech Stack Autorizado
 *   **Gestor (Package Manager):** `uv` (Líder en velocidad, se prohíbe usar `pip` puro o `requirements.txt`).
 *   **Agentic Framework:** `langgraph` + `langchain`.
-*   **LLMs Soportados:** Google Gemini (Primario), OpenAI, Anthropic.
+*   **LLMs Soportados:** Llama 3 vía Groq (Primario por velocidad y costo), Google Gemini, OpenAI, Anthropic.
 *   **Audio / STT:** Groq API ejecutando `whisper-large-v3`.
 *   **Scraping:** `playwright` (Sincrónico/Asincrónico). `pandas` para estructuración de Tablas.
-*   **Base de Datos Nativa:** `sqlite3` (Solo usado para caché histórica de extracción, no es la "fuente de verdad" del CRM del cliente).
+*   **Base de Datos Nativa:** `sqlite3` (Tablas maestras locales y colas de trabajo).
+*   **Arquitectura Web (NUEVO):** FastAPI (Backend API Rest) + Next.js (Frontend Dashboard).
 
 ---
 
-## 4. Estado Actual (Phase 2 In-Progress)
-*   **Logrado (Fase 1):** Scraper Playwright al 100%. Módulos limpios. Bot soporta comandos de voz. Storage Service aísla la carga.
-*   **Aprobado (Fase 2 - Programación de Alertas y Resúmenes Autónomos):**
-    *   **Prohibido usar Cronjobs del SO.** La aplicación debe mantenerse agnóstica a la infraestructura. Integrar un planificador nativo asíncrono en Python (como `APScheduler`).
-    *   El bot de Telegram deberá despachar mensajes proactivamente a los administradores a horas predefinidas (resúmenes de prospección y métricas). Se debe permitir agregar, modificar y eliminar recordatorios dinámicamente según lo defina el usuario.
-*   **Fase 3 (Outreach y CRM):**
-    *   Iniciar integración con WAHA (WhatsApp HTTP API) vía Docker OrbStack.
-    *   Crear Agente LangGraph capaz de redactar mensajes a los "Micros" extraídos (Outreach Agent).
-    *   Enganchar HubSpot CRM para capturar automáticamente Webhooks de WAHA (Sync Agent).
-
+## 4. Roadmap y Estado Actual
+*   **Logrado (Fase 1 - Extracción Básica):** Scraper Playwright al 100%. Módulos limpios. Bot soporta comandos de voz. Storage Service aísla la carga.
+*   **Logrado (Fase 2 - Alertas y Herramientas LLM):**
+    *   Integración de `APScheduler` para alertas asíncronas agnósticas.
+    *   Creación de herramientas estables en LangGraph para listar y agendar tareas superando errores de schema y contexto (Fixes de Marzo 2026 aplicados).
+*   **Fase 2.5 (Batch Scraper Queue System):**
+    *   Resolver el fallo de concurrencia de Python (GIL) aislando Playwright en un Worker de cola (`batch_jobs`).
+    *   Normalizar base de datos con tablas globales (`master_cities`) y por usuario (`tenant_categories`).
+*   **Fase 3 (Admin Dashboard Web - FastAPI + Next.js):**
+    *   Levantar servidor API local en FastAPI.
+    *   Construir aplicación SPA en Next.js para administrar diccionarios de datos y controlar manualmente la Cola del Scraper (Interruptor ON/OFF).
+    *   Implementar autenticación Passwordless vía Telegram OTP JWT.
+*   **Fase 4 (Outreach Automatizado y CRM):**
+    *   Integrar WAHA (WhatsApp HTTP API) vía Docker OrbStack.
+    *   Crear Agente LangGraph capaz de redactar mensajes proactivos a los leads extraídos generados por el Worker.
+    *   Enganchar HubSpot CRM para capturar Webhooks de WAHA.

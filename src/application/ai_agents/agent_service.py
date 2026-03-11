@@ -1,6 +1,6 @@
 import json
 from langchain_core.messages import HumanMessage
-from src.agents.agent import agente_graph
+from src.application.ai_agents.agent import agente_graph
 from src.core.config import AGENT_NAME
 
 async def procesar_mensaje_agente(texto_usuario: str, session_id: str) -> dict:
@@ -59,7 +59,7 @@ async def procesar_mensaje_agente(texto_usuario: str, session_id: str) -> dict:
     archivos_generados = []
     if se_uso_scraper:
         print("   -> 📦 Detecté que se ejecutó un scraper. Buscando archivos Excel recientes...")
-        from src.services.storage_service import buscar_excels_de_usuario
+        from src.infrastructure.database.storage_service import buscar_excels_de_usuario
         archivos_generados = buscar_excels_de_usuario(session_id)
         if not archivos_generados:
             print(f"   -> ❌ No se encontró la carpeta esperada para la sesión: {session_id}")

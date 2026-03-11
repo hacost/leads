@@ -24,7 +24,7 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
     
     # Construimos el comando igual que si lo escribiéramos en la terminal con uv run
     comando = [
-        "uv", "run", "python", "-m", "src.scrapers.scraper", 
+        "uv", "run", "python", "-m", "src.domain.engine.scrapers.scraper", 
         "--zones", zonas, 
         "--categories", categorias,
         "--session-id", thread_id
@@ -55,7 +55,7 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfi
     print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
     
     comando = [
-        "uv", "run", "python", "-m", "src.scrapers.facebook_search_scraper", 
+        "uv", "run", "python", "-m", "src.domain.engine.scrapers.facebook_search_scraper", 
         "--zones", zonas, 
         "--categories", categorias,
         "--session-id", thread_id
@@ -78,8 +78,8 @@ def gestionar_recordatorio(accion: str, config: RunnableConfig, cron_expression:
     - prompt_task: (Solo para agendar) Las instrucciones exactas que debe ejecutar el bot cuando se despierte la alerta, escrito como si el usuario lo estuviera pidiendo en ese momento, ej. "Busca ferreterías en Monterrey".
     - alerta_id: (Solo para borrar) El ID de la alerta que se quiere eliminar.
     """
-    from src.services.scheduler_service import SchedulerService
-    from src.services.storage_service import StorageService
+    from src.application.batch_jobs.scheduler_service import SchedulerService
+    from src.infrastructure.database.storage_service import StorageService
     
     chat_id = config.get("configurable", {}).get("thread_id", "default")
     print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Gestión de Alertas (Acción: {accion}).")

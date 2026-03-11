@@ -592,7 +592,7 @@ class GoogleMapsScraper:
 
         # 5. EXPORTS (No duplicates, no missing phones in master/micro/corporate)
         
-        from src.services.storage_service import StorageService
+        from src.infrastructure.database.storage_service import StorageService
         print(f"\n📁 Guardando todos los archivos exportados usando StorageService...")
         
         # A. Master List (Valid Phones Only)

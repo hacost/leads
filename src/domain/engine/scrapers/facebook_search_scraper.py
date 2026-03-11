@@ -242,7 +242,7 @@ class FacebookSearchScraper:
         if len(df) < initial_len:
             print(f"  [INFO] Filtered out {initial_len - len(df)} duplicate leads before saving.")
         
-        from src.services.storage_service import StorageService
+        from src.infrastructure.database.storage_service import StorageService
         file_path = StorageService.guardar_excel(df, self.session_id, "facebook_direct_leads.xlsx")
         print(f"\n[SUCCESS] Exported {len(df)} Facebook leads a través de StorageService en {file_path}")
 
