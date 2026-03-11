@@ -20,4 +20,7 @@ allowed_chats_env = os.getenv("ALLOWED_CHAT_IDS", "")
 ALLOWED_CHAT_IDS = [int(cid.strip()) for cid in allowed_chats_env.split(",")] if allowed_chats_env else []
 
 # Modelo LLM Elegido
-LLM_MODEL = os.getenv("LLM_MODEL", "gemini").lower()
+LLM_MODEL = os.getenv("LLM_MODEL", "groq").lower()
+
+# JWT Secret para la API FastAPI
+JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-key-bastion-core")
