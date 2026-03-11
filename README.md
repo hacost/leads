@@ -6,30 +6,26 @@ El Agente de IA interpreta tu petición, extrae las zonas y categorías, y autom
 
 ---
 
-## 🚀 Arquitectura "Clean" (Capa por Capa)
+## 🚀 Arquitectura "Clean" Basada en DDD (Domain-Driven Design)
 
-A partir de Febrero 2026, el proyecto fue refactorizado siguiendo los principios de Clean Architecture y SOLID:
+El proyecto está estructurado estrictamente en 5 capas:
 
-1. **`src/core/`**: Centraliza configuraciones (`config.py`) leyendo el `.env` una sola vez, y maneja la Lista Blanca de seguridad (`security.py`).
-2. **`src/services/`**: Módulos independientes y "stateless" (sin memoria) que ejecutan tareas:
-   * `audio_service.py`: Recibe `.ogg` y devuelve texto vía Whisper.
-   * `storage_service.py`: Capa de abstracción para guardar y leer archivos Excel/Sistema.
-   * `agent_service.py`: Ensambla y ejecuta el Grafo de IA de LangGraph.
-3. **`src/interfaces/`**: Adaptadores hacia el mundo exterior. 
-   * `telegram_bot.py`: Escucha mensajes de Telegram (texto/audio) y usa los `services` para responder.
-4. **`src/scrapers/`**: Herramientas pesadas bajo demanda. Clases stateful (`scraper.py`) conectadas a Playwright.
+1. **`src/domain/`**: El núcleo absoluto. Contiene las entidades, interfaces y modelos de estado (Pydantic Models y Enums). Sin dependencias externas.
+2. **`src/application/`**: Casos de uso de la aplicación, como la orquestación de Agentes de IA (`agent_service.py`), lógica de scraping puro y el motor del Scheduler asíncrono.
+3. **`src/core/`**: Centraliza configuraciones técnicas genéricas (`config.py`) y reglas de negocio transversales globales conectadas al `.env`.
+4. **`src/infrastructure/`**: Implementaciones técnicas (Adaptadores). Contiene la conexión a la base de datos local SQLite (`storage_service.py`), procesadores abstractos de mensajería externa y servicios de audio (`whisper`).
+5. **`src/presentation/`**: Puertos de entrada/salida. Aquí viven las rutas de la API (`api/` con FastAPI), el adaptador del Bot de Telegram (`telegram_bot/`) y los workers programados.
 
 ---
 
 ## 🚀 Características Principales
 
-*   **Notas de Voz (Whisper 3)**: Puedes enviarle audios al Bot de Telegram. Utiliza la API de Groq + Whisper-large-v3 para transcribir instantáneamente lo que pides.
-*   **Agente Inteligente (LangGraph)**: El "Cerebro" del sistema decide qué herramienta de scraping utilizar basado en tu petición usando Python ReAct agents.
-*   **Google Maps Scraping**: Extrae nombres, direcciones, teléfonos, sitios web, calificaciones y cantidad exacta de reseñas comerciales.
-*   **Enriquecimiento con Facebook**: Una segunda herramienta que busca en Facebook para recuperar teléfonos o correos faltantes de tus prospectos extraídos. Analiza perfiles y hasta los últimos 3 posts buscando números o enlaces `wa.me`.
-*   **Aislamiento de Sesiones**: Los archivos generados no se cruzan entre usuarios de Telegram. Si falla una búsqueda, la carpeta de sesión se limpia sola para no mandar "archivos fantasma".
-*   **Inteligencia y Caché (SQLite)**: Una base de datos local (`leads.db`) guarda los prospectos ya extraídos. Al buscar nuevamente, reutiliza los datos existentes de búsquedas exactas para ahorrar tiempo.
-*   **Segmentación Automática**: Clasifica y separa automáticamente a los leads válidos en diferentes archivos de Excel (Micro vs Corporate).
+*   **Notas de Voz (Whisper 3)**: Puedes enviarle audios al Bot de Telegram. Utiliza la API de Groq + Whisper-large-v3 para transcribir instantáneamente.
+*   **Agente Inteligente (LangGraph)**: El "Cerebro" del sistema decide qué herramienta de scraping usar basado en tu petición, usando LLM de código abierto hiper-rápidos (Groq/Llama3).
+*   **Google Maps Scraping Asíncrono**: Extrae negocios, direcciones, teléfonos y reseñas.
+*   **Enriquecimiento con Facebook**: Busca teléfonos faltantes de prospectos navegando en Facebook y analizando posteos recientes.
+*   **Aislamiento de Sesiones**: Los archivos generados no se cruzan entre usuarios de Telegram.
+*   **Dashboard Web Integrado (FastAPI + Next.js)**: Acceso a un panel web con Login Passwordless (OTP vía Telegram) para administrar colas de trabajos y categorías, totalmente desacoplado del Bot.
 
 ---
 
@@ -85,10 +81,17 @@ Puedes personalizar las reglas de segmentación sin tocar código Python. Modifi
 
 ## 🛠 Instalación y Uso
 
-Este proyecto requiere **`uv`**, el gestor de paquetes de Python de alta velocidad.
+Este proyecto requiere **`uv`**, el gestor de paquetes de Python de alta velocidad, y **`npm`** para el frontend.
 
 1.  Instala `uv`: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-2.  Sincroniza dependencias: `uv sync`
+2.  Sincroniza dependencias del backend: `uv sync`
 3.  Instala Playwright: `uv run playwright install chromium`
-4.  Levanta el Bot: `uv run main.py`
-5.  **Utiliza el Sistema**: Busca tu Bot en Telegram y mándale un Audio o Texto.
+4.  Instala dependencias del frontend: `cd frontend && npm install`
+5.  **Entorno de Desarrollo Unificado:** 
+    Ejecuta el script orquestador desde la raíz para levantar simultáneamente el Bot de Telegram, la API FastAPI y el Dashboard frontend Next.js:
+    ```bash
+    ./start_dev.sh
+    ```
+6.  **Uso:** 
+    *   **Dashboard:** Ingresa a `http://localhost:3000` y loguéate usando tu ID de Telegram (recibirás un OTP vía Telegram).
+    *   **Bot:** Busca tu Bot en Telegram y mándale un Audio o Texto para iniciar el scraping.

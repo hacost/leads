@@ -40,14 +40,22 @@ Cualquier Ingeniero / Agente IA que toque este código **debe** apegarse a las s
 *   **Logrado (Fase 2 - Alertas y Herramientas LLM):**
     *   Integración de `APScheduler` para alertas asíncronas agnósticas.
     *   Creación de herramientas estables en LangGraph para listar y agendar tareas superando errores de schema y contexto (Fixes de Marzo 2026 aplicados).
-*   **Fase 2.5 (Batch Scraper Queue System):**
-    *   Resolver el fallo de concurrencia de Python (GIL) aislando Playwright en un Worker de cola (`batch_jobs`).
-    *   Normalizar base de datos con tablas globales (`master_cities`) y por usuario (`tenant_categories`).
-*   **Fase 3 (Admin Dashboard Web - FastAPI + Next.js):**
-    *   Levantar servidor API local en FastAPI.
-    *   Construir aplicación SPA en Next.js para administrar diccionarios de datos y controlar manualmente la Cola del Scraper (Interruptor ON/OFF).
-    *   Implementar autenticación Passwordless vía Telegram OTP JWT.
+*   **Fase 2.5 (Batch Scraper Queue System) [PARCIALMENTE IMPLEMENTADA]:**
+    *   Normalizar base de datos con tablas globales (`master_cities`) y por usuario (`tenant_categories`). (Realizado)
+    *   Crear endpoints CRUD en FastAPI y almacenar intención en tabla `batch_jobs`. (Realizado)
+    *   Resolver el fallo de concurrencia de Python aislando Playwright en un "Worker de fondo" autónomo que consuma la cola de jobs. (PENDIENTE)
+*   **Fase 3 (Admin Dashboard Web - FastAPI + Next.js) [EN PROGRESO]:**
+    *   Levantar servidor API local en FastAPI. (Realizado)
+    *   Construir aplicación SPA en Next.js para administrar diccionarios de datos y controlar manualmente la Cola del Scraper (Interruptor ON/OFF). (Autenticación implementada, pendiente CRUDs)
+    *   Implementar autenticación Passwordless vía Telegram OTP JWT. (Realizado)
+    *   Creación de script orquestador `start_dev.sh` para levantar Bot, API y Frontend simultáneamente. (Realizado)
 *   **Fase 4 (Outreach Automatizado y CRM):**
     *   Integrar WAHA (WhatsApp HTTP API) vía Docker OrbStack.
     *   Crear Agente LangGraph capaz de redactar mensajes proactivos a los leads extraídos generados por el Worker.
     *   Enganchar HubSpot CRM para capturar Webhooks de WAHA.
+
+---
+
+## 5. Instrucciones para Agentes de IA (CRÍTICO)
+**🚨 IMPORTANTE PARA CUALQUIER IA O AGENTE QUE LEA ESTE ARCHIVO 🚨**
+Antes de proponer, modificar o generar CUALQUIER línea de código o script en este proyecto, **ESTÁS OBLIGADO a leer el archivo `.agentrules`** ubicado en la raíz del proyecto. Este archivo contiene las directrices de nivel "Developer Senior" (SOLID, Clean Architecture, prohibición de commits automáticos) que rigen este repositorio. Ignorar el archivo `.agentrules` es una violación a las reglas fundamentales de este proyecto.
