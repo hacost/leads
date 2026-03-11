@@ -177,6 +177,24 @@ class StorageService:
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
+    def get_or_create_city(name: str) -> int:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            # Búsqueda case as insensitive as possible using COLLATE NOCASE
+            cursor.execute("SELECT id FROM master_cities WHERE name COLLATE NOCASE = ?", (name,))
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+            
+            # Si no existe, la creamos con valores por defecto
+            cursor.execute(
+                "INSERT INTO master_cities (name, state, country) VALUES (?, 'N/A', 'N/A')",
+                (name,)
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    @staticmethod
     def get_categories(owner_id: str):
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
@@ -189,6 +207,26 @@ class StorageService:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES (?, ?)", (name, owner_id))
+            conn.commit()
+            return cursor.lastrowid
+
+    @staticmethod
+    def get_or_create_category(name: str, owner_id: str) -> int:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM tenant_categories WHERE name COLLATE NOCASE = ? AND owner_id = ?",
+                (name, owner_id)
+            )
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+                
+            # Si no existe para este usuario, la creamos
+            cursor.execute(
+                "INSERT INTO tenant_categories (name, owner_id) VALUES (?, ?)",
+                (name, owner_id)
+            )
             conn.commit()
             return cursor.lastrowid
 
