@@ -28,7 +28,7 @@ BOT_PID=$!
 
 # 2. Iniciar la API de FastAPI (Backend)
 echo -e "${YELLOW}[2/3] Iniciando FastAPI Backend en el puerto 8000...${NC}"
-uv run uvicorn src.presentation.api.main:app --port 8000 --reload &
+uv run python -m uvicorn src.presentation.api.main:app --port 8000 --reload &
 API_PID=$!
 
 # 3. Iniciar el Frontend (Next.js Dashboard)
