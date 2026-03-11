@@ -20,6 +20,36 @@ def _init_db():
                 is_active BOOLEAN NOT NULL DEFAULT 1
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS master_cities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                state TEXT NOT NULL,
+                country TEXT NOT NULL,
+                status INTEGER NOT NULL DEFAULT 1
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tenant_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                owner_id TEXT NOT NULL,
+                status INTEGER NOT NULL DEFAULT 1
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS batch_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER NOT NULL,
+                city_id INTEGER NOT NULL,
+                owner_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (city_id) REFERENCES master_cities(id),
+                FOREIGN KEY (category_id) REFERENCES tenant_categories(id)
+            )
+        ''')
         conn.commit()
 
 _init_db()
@@ -133,6 +163,85 @@ class StorageService:
                 cursor.execute("UPDATE scheduled_alerts SET is_active=0 WHERE id=?", (alerta_id,))
             conn.commit()
             return cursor.rowcount > 0
+
+    # ==========================================
+    # LÓGICA DE BASE DE DATOS PARA REQUISITOS BATCH (PHASE 2.5)
+    # ==========================================
+
+    @staticmethod
+    def get_master_cities():
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM master_cities WHERE status=1")
+            return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def get_categories(owner_id: str):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM tenant_categories WHERE owner_id=? AND status=1", (owner_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def create_category(name: str, owner_id: str) -> int:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES (?, ?)", (name, owner_id))
+            conn.commit()
+            return cursor.lastrowid
+
+    @staticmethod
+    def get_jobs(owner_id: str):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT j.*, c.name as category_name, m.name as city_name 
+                FROM batch_jobs j
+                JOIN tenant_categories c ON j.category_id = c.id
+                JOIN master_cities m ON j.city_id = m.id
+                WHERE j.owner_id=?
+                ORDER BY j.created_at DESC
+            ''', (owner_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def create_job(category_id: int, city_id: int, owner_id: str) -> int:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO batch_jobs (category_id, city_id, owner_id, status) VALUES (?, ?, ?, 'pending')",
+                (category_id, city_id, owner_id)
+            )
+            conn.commit()
+            return cursor.lastrowid
+            
+    @staticmethod
+    def get_pending_job():
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT j.*, c.name as category_name, m.name as city_name 
+                FROM batch_jobs j
+                JOIN tenant_categories c ON j.category_id = c.id
+                JOIN master_cities m ON j.city_id = m.id
+                WHERE j.status='pending'
+                ORDER BY j.created_at ASC
+                LIMIT 1
+            ''')
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    @staticmethod
+    def update_job_status(job_id: int, status: str):
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE batch_jobs SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (status, job_id))
+            conn.commit()
+
 
 # Puedes usar estas funciones simples importándolas directamente
 def buscar_excels_de_usuario(session_id: str) -> List[str]:
