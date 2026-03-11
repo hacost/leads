@@ -15,11 +15,14 @@ El proyecto, al estar dividido en componentes asíncronos distribuidos, requiere
 
 ## 2. Estrategia por Componente Arquitectónico
 
+**REGLA DE ORO DE ESTRUCTURA:** Todos los archivos de pruebas (`tests/`) DEBEN reflejar exactamente la misma estructura de carpetas que la carpeta `src/`. Por ejemplo, si el código está en `src/application/batch_jobs/worker.py`, su prueba debe estar obligatoriamente en `tests/application/batch_jobs/test_worker.py`.
+
 ### A) El Servidor API (`src/presentation/api/` y `src/application/`)
 **Tipo de Pruebas:** Unitarias y de Integración.
 **Cómo probarlo:**
 1.  **Endpoints (Rutas FastAPI):** Usar `TestClient` de FastAPI (basado en `httpx`). Debe haber pruebas para los códigos `200 OK`, `401 Unauthorized` (fallo de JWT OTP), y `400 Bad Request` en todos los CRUDs.
 2.  **Domain Models:** Pruebas unitarias directas sobre los modelos Pydantic para asegurar que las validaciones de datos (como la estructura de un `BatchJob`) fallen correctamente cuando reciben datos corruptos.
+3.  **Background Workers (`src/application/`):** Unitarias Aisladas (Mocks rápidos). Usaremos `unittest.mock` para engañar al worker haciéndole creer que `StorageService.get_pending_job` devolvió un trabajo, y bloquearemos la instanciación real de Playwright. Solo verificaremos si la lógica condicional del estado del "Job" (`pending` -> `processing` -> `completed`/`failed`) cambia como debe.
 
 ### B) Bot de Telegram (`src/presentation/telegram_bot/`)
 **Tipo de Pruebas:** Unitarias con Mocks.

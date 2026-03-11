@@ -40,10 +40,11 @@ Cualquier Ingeniero / Agente IA que toque este código **debe** apegarse a las s
 *   **Logrado (Fase 2 - Alertas y Herramientas LLM):**
     *   Integración de `APScheduler` para alertas asíncronas agnósticas.
     *   Creación de herramientas estables en LangGraph para listar y agendar tareas superando errores de schema y contexto (Fixes de Marzo 2026 aplicados).
-*   **Fase 2.5 (Batch Scraper Queue System) [PARCIALMENTE IMPLEMENTADA]:**
+*   **Fase 2.5 (Batch Scraper Queue System & Unificación de Búsquedas) [EN PROGRESO]:**
     *   Normalizar base de datos con tablas globales (`master_cities`) y por usuario (`tenant_categories`). (Realizado)
     *   Crear endpoints CRUD en FastAPI y almacenar intención en tabla `batch_jobs`. (Realizado)
-    *   Resolver el fallo de concurrencia de Python aislando Playwright en un "Worker de fondo" autónomo que consuma la cola de jobs. (PENDIENTE)
+    *   Resolver el fallo de concurrencia aislando Playwright en un "Worker de fondo" autónomo. (Worker Base Realizado)
+    *   **Unificar Arquitectura:** Enrutar **todas** las búsquedas (Bot Telegram y Web) hacia la cola `batch_jobs` y delegar las notificaciones push al Worker (Término de refactorización pendiente bajo estricto TDD).
 *   **Fase 3 (Admin Dashboard Web - FastAPI + Next.js) [EN PROGRESO]:**
     *   Levantar servidor API local en FastAPI. (Realizado)
     *   Construir aplicación SPA en Next.js para administrar diccionarios de datos y controlar manualmente la Cola del Scraper (Interruptor ON/OFF). (Autenticación implementada, pendiente CRUDs)

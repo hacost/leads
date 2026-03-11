@@ -42,3 +42,6 @@ secrets.json
 .ipynb_checkpoints/
 
 .langgraph_api/
+
+# --- Antigravity Global Skills ---
+.agents/
