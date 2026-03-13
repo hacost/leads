@@ -1,6 +1,7 @@
 # --- Python Standard ---
 __pycache__/
 *.py[oc]
+**/.pytest_cache/
 build/
 dist/
 wheels/
@@ -47,7 +48,7 @@ secrets.json
 .agents/
 
 # --- Frontend (Next.js) ---
-frontend/node_modules/
+**/node_modules/
 frontend/.pnp
 frontend/.pnp.*
 frontend/.yarn/*
@@ -56,7 +57,7 @@ frontend/.yarn/*
 !frontend/.yarn/releases
 !frontend/.yarn/versions
 frontend/coverage/
-frontend/.next/
+**/ .next/
 frontend/out/
 frontend/build/
 frontend/*.pem
@@ -67,3 +68,4 @@ frontend/.pnpm-debug.log*
 frontend/.vercel
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
+**/ .DS_Store
