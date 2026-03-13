@@ -21,22 +21,27 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== Iniciando Entorno de Desarrollo de Bastión Core ===${NC}\n"
 
-# 1. Iniciar el Bot de Telegram (Polling Worker)
-echo -e "${YELLOW}[1/3] Iniciando Bot de Telegram...${NC}"
+# 1. Iniciar el Bot de Telegram (Polling Interface)
+echo -e "${YELLOW}[1/4] Iniciando Bot de Telegram...${NC}"
 uv run main.py &
 BOT_PID=$!
 
-# 2. Iniciar la API de FastAPI (Backend)
-echo -e "${YELLOW}[2/3] Iniciando FastAPI Backend en el puerto 8000...${NC}"
+# 2. Iniciar el Scraper Worker (Async Background Jobs)
+echo -e "${YELLOW}[2/4] Iniciando Scraper Worker (Cola asíncrona)...${NC}"
+uv run python -m src.application.batch_jobs.scraper_worker &
+WORKER_PID=$!
+
+# 3. Iniciar la API de FastAPI (Backend)
+echo -e "${YELLOW}[3/4] Iniciando FastAPI Backend en el puerto 8000...${NC}"
 uv run python -m uvicorn src.presentation.api.main:app --port 8000 --reload &
 API_PID=$!
 
-# 3. Iniciar el Frontend (Next.js Dashboard)
-echo -e "${YELLOW}[3/3] Iniciando Next.js Frontend en el puerto 3000...${NC}"
+# 4. Iniciar el Frontend (Next.js Dashboard)
+echo -e "${YELLOW}[4/4] Iniciando Next.js Frontend en el puerto 3000...${NC}"
 cd frontend && npm run dev &
 FRONTEND_PID=$!
 
-echo -e "\n${GREEN}Todos los servicios han sido iniciados correctamente.${NC}"
+echo -e "\n${GREEN}Todos los servicios (4/4) han sido iniciados correctamente.${NC}"
 echo -e "${BLUE}API URL:${NC}      http://localhost:8000"
 echo -e "${BLUE}Dashboard:${NC}    http://localhost:3000"
 echo -e "${RED}Presiona Ctrl+C para detener TODOS los servicios.${NC}\n"
@@ -46,10 +51,13 @@ cleanup() {
     printf "\n${RED}Deteniendo todos los servicios de desarrollo...${NC}\n"
     
     # Enviar señal de terminación a los procesos
-    kill -TERM $BOT_PID $API_PID $FRONTEND_PID 2>/dev/null
+    kill -TERM $BOT_PID $WORKER_PID $API_PID $FRONTEND_PID 2>/dev/null
     
-    # Esperar silenciosamente a que terminen de apagar (FastAPI y Next.js)
-    wait $BOT_PID $API_PID $FRONTEND_PID 2>/dev/null
+    # Esperar silenciosamente a que terminen de apagar
+    base_services=( $BOT_PID $WORKER_PID $API_PID $FRONTEND_PID )
+    for pid in "${base_services[@]}"; do
+        wait $pid 2>/dev/null
+    done
     
     printf "¡Hasta luego!\n"
     exit 0
