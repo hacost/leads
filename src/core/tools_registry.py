@@ -1,6 +1,6 @@
-import subprocess
 from langchain_core.tools import tool
 from langchain_core.runnables.config import RunnableConfig
+from src.infrastructure.database.storage_service import StorageService
 
 # ==========================================
 # 1. REGISTRO DE HERRAMIENTAS (TOOLS)
@@ -18,53 +18,51 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
     - zonas: Las ciudades o municipios separados por punto y coma (ej. "Monterrey; San Pedro").
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
     """
-    thread_id = config.get("configurable", {}).get("thread_id", "default")
-    print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Google Maps scraper.")
-    print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
+    owner_id = config.get("configurable", {}).get("thread_id", "default")
+    print(f"\n[🤖 AGENTE ENCOLANDO TRABAJO] -> Google Maps scraper.")
     
-    # Construimos el comando igual que si lo escribiéramos en la terminal con uv run
-    comando = [
-        "uv", "run", "python", "-m", "src.domain.engine.scrapers.scraper", 
-        "--zones", zonas, 
-        "--categories", categorias,
-        "--session-id", thread_id
-    ]
+    lista_zonas = [z.strip() for z in zonas.split(";") if z.strip()]
+    lista_cats = [c.strip() for c in categorias.split(";") if c.strip()]
     
-    # subprocess.run ejecuta el comando de forma "aislada" en la consola del sistema.
-    try:
-        resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        # Checking if zero rows were added to the DB, meaning no new results. Focus on the actual output.
-        if "0 new rows added" in resultado.stdout or "Extracted: " not in resultado.stdout:
-            return f"BÚSQUEDA FALLIDA: NO SE ENCONTRÓ NINGÚN RESULTADO válido para {categorias} en {zonas}. Por favor, informa al usuario que no obtuviste resultados. NO se generó ningún archivo."
-        else:
-            return f"Éxito. INSTRUCCIÓN ESTRICTA: Escribe ÚNICAMENTE '¡Hola {config.get('configurable', {}).get('thread_id', 'Amo')}! He terminado de buscar.' y debajo enlista SOLAMENTE LAS RUTAS de los archivos Excel generados con viñetas (bullet points) basándote en este log. ESTÁ PROHIBIDO mencionar la base de datos (leads.db), carpetas internas o dar explicaciones técnicas largas:\n{resultado.stdout[-500:]}"
-    except subprocess.CalledProcessError as e:
-        return f"Error ejecutando scraper de Maps: {e.stderr}"
+    jobs_creados = []
+    for cat_name in lista_cats:
+        for zona_name in lista_zonas:
+            # Aseguramos que existan en la DB y obtenemos IDs
+            city_id = StorageService.get_or_create_city(zona_name)
+            cat_id = StorageService.get_or_create_category(cat_name, owner_id)
+            
+            # Encolamos el trabajo
+            job_id = StorageService.create_job(cat_id, city_id, owner_id)
+            jobs_creados.append(str(job_id))
+    
+    if not jobs_creados:
+        return "No se pudieron crear los trabajos de búsqueda. Verifica los parámetros."
+        
+    return f"✅ ¡Entendido! He agendado {len(jobs_creados)} búsqueda(s) de extracción (Job IDs: {', '.join(jobs_creados)}). Te enviaré los resultados por este chat en cuanto el proceso termine en segundo plano. ¿Hay algo más en lo que pueda ayudarte mientras tanto?"
 
 @tool
 def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfig) -> str:
     """
-    Usa esta herramienta cuando el usuario pida buscar leads o negocios ESPECÍFICAMENTE en Facebook,
-    o cuando pida buscar directamente perfiles de redes sociales.
+    Usa esta herramienta cuando el usuario pida buscar leads o negocios ESPECÍFICAMENTE en Facebook.
     Acepta dos parámetros:
     - zonas: Las ciudades o municipios separados por punto y coma (ej. "Monterrey; San Pedro").
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
     """
-    thread_id = config.get("configurable", {}).get("thread_id", "default")
-    print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Facebook scraper.")
-    print(f"   ► Parámetros recibidos del LLM: Zonas={zonas} | Categorias={categorias}")
+    owner_id = config.get("configurable", {}).get("thread_id", "default")
+    print(f"\n[🤖 AGENTE ENCOLANDO TRABAJO] -> Facebook scraper.")
     
-    comando = [
-        "uv", "run", "python", "-m", "src.domain.engine.scrapers.facebook_search_scraper", 
-        "--zones", zonas, 
-        "--categories", categorias,
-        "--session-id", thread_id
-    ]
-    try:
-        resultado = subprocess.run(comando, capture_output=True, text=True, check=True)
-        return f"Éxito: El scraper de Facebook finalizó. Log final de consola:\n{resultado.stdout[-500:]}"
-    except subprocess.CalledProcessError as e:
-        return f"Error ejecutando scraper de Facebook: {e.stderr}"
+    lista_zonas = [z.strip() for z in zonas.split(";") if z.strip()]
+    lista_cats = [c.strip() for c in categorias.split(";") if c.strip()]
+    
+    jobs_creados = []
+    for cat_name in lista_cats:
+        for zona_name in lista_zonas:
+            city_id = StorageService.get_or_create_city(zona_name)
+            cat_id = StorageService.get_or_create_category(cat_name, owner_id)
+            job_id = StorageService.create_job(cat_id, city_id, owner_id)
+            jobs_creados.append(str(job_id))
+            
+    return f"✅ He encolado {len(jobs_creados)} búsqueda(s) en Facebook. Recibirás los archivos aquí automáticamente."
 
 @tool
 def gestionar_recordatorio(accion: str, config: RunnableConfig, cron_expression: str = "", prompt_task: str = "", alerta_id: int | str = 0) -> str:
