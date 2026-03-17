@@ -23,7 +23,7 @@ elif LLM_MODEL == "groq":
 else:
     # Gemini (Por defecto)
     from langchain_google_genai import ChatGoogleGenerativeAI
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)
 
 # Empaquetamos nuestras herramientas en una lista de Python
 herramientas_del_agente = [ejecutar_scraper_google_maps, ejecutar_scraper_facebook, gestionar_recordatorio]
