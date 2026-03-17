@@ -57,7 +57,7 @@ frontend/.yarn/*
 !frontend/.yarn/releases
 !frontend/.yarn/versions
 frontend/coverage/
-**/ .next/
+**/.next/
 frontend/out/
 frontend/build/
 frontend/*.pem
@@ -68,4 +68,4 @@ frontend/.pnpm-debug.log*
 frontend/.vercel
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
-**/ .DS_Store
+**/.DS_Store
