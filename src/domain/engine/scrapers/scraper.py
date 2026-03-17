@@ -18,12 +18,13 @@ class GoogleMapsScraper:
     Scraper for Google Maps business listings via Playwright.
     Methods to search, scroll feed, extract details (Name, Address, Phone), and save data.
     """
-    def __init__(self, headless_override=None, session_id=None):
+    def __init__(self, headless_override=None, session_id=None, db_path='data/leads.db'):
         self.results = []
         self.known_leads = {} # Cache for existing DB records: {(name, zone): data_dict}
         self.seen_names = set() # Global session cache for names
         self.seen_phones = set() # Global session cache for phones
         self.session_id = session_id
+        self.db_path = db_path
         self.config = self.load_config()
         if headless_override is not None:
             self.headless = headless_override
@@ -58,12 +59,15 @@ class GoogleMapsScraper:
         """
         Loads existing leads from the database into memory to avoid re-scraping.
         """
-        db_path = 'data/leads.db'
-        if not os.path.exists(db_path):
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+            
+        if not os.path.exists(self.db_path) and self.db_path != ':memory:':
             return
 
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row # Access columns by name
             c = conn.cursor()
             
@@ -281,61 +285,8 @@ class GoogleMapsScraper:
                 else:
                     data['website'] = "N/A"
 
-                # REVIEWS EXTRACTION - ROBUST JS VERSION
                 try:
-                    # We use a JS script to scan the entire listing element for ratings and reviews
-                    # This is much more resilient to DOM changes.
-                    js_data = await page.evaluate(rf'''
-                        (selector) => {{
-                            const article = document.querySelector(selector);
-                            if (!article) return {{stars: 0, reviews: 0}};
-                            
-                            // Find all spans with aria-label containing stars/estrellas or reviews/opiniones
-                            const spans = Array.from(article.querySelectorAll('span[aria-label], button[aria-label]'));
-                            let stars = 0;
-                            let reviews = 0;
-                            
-                            for (const s of spans) {{
-                                const label = s.getAttribute('aria-label');
-                                if (!label) continue;
-                                
-                                // Stars check
-                                if (label.includes('stars') || label.includes('estrellas')) {{
-                                    const sMatch = label.match(/(\d+[.,]\d+)/);
-                                    if (sMatch) stars = parseFloat(sMatch[1].replace(',', '.'));
-                                }}
-                                
-                                // Reviews check (match the number explicitly BEFORE the word)
-                                if (label.includes('reviews') || label.includes('opiniones') || label.includes('Reviews') || label.includes('Opiniones')) {{
-                                    // Match format "XX opiniones" or "XX reviews"
-                                    const rMatch = label.match(/([\d,.]+)\s*(opiniones|reviews)/i);
-                                    if (rMatch) reviews = parseInt(rMatch[1].replace(/[.,]/g, ''));
-                                    else {{
-                                        // Fallback if the layout is different but the word is there
-                                        const rMatchAny = label.match(/([\d,.]+)/g);
-                                        // If there are multiple numbers (e.g. rating and reviews), reviews is usually the last/largest one
-                                        if (rMatchAny && rMatchAny.length > 1) {{
-                                            reviews = parseInt(rMatchAny[rMatchAny.length - 1].replace(/[.,]/g, ''));
-                                        }} else if (rMatchAny) {{
-                                             // If only one number but we know it's a review span (e.g. separate from rating span)
-                                            if (!label.includes('stars') && !label.includes('estrellas')) {{
-                                                reviews = parseInt(rMatchAny[0].replace(/[.,]/g, ''));
-                                            }}
-                                        }}
-                                    }}
-                                }}
-                            }}
-                            
-                            // Fallback for reviews: text inside parentheses (e.g., "(161)")
-                            if (reviews === 0) {{
-                                const textMatch = article.innerText.match(/\(([\d,.]+)\)/);
-                                if (textMatch) reviews = parseInt(textMatch[1].replace(/[.,]/g, ''));
-                            }}
-                            
-                            return {{stars, reviews}};
-                        }}
-                    ''', f'div[role="article"]:has([aria-label="{name}"])') # Target by name for certainty
-                    
+                    js_data = await self._extract_listing_data_via_js(page, name)
                     data['stars'] = js_data.get('stars', 0.0)
                     data['reviews'] = js_data.get('reviews', 0)
 
@@ -396,6 +347,36 @@ class GoogleMapsScraper:
         return None, None, "Skipped"
 
     @staticmethod
+    def is_chain(name):
+        blacklist = ['OXXO', '7-ELEVEN', 'WALMART', 'OFFICE DEPOT', 'HEB', 'SORIANA', 'FARMACIAS GUADALAJARA', 'FARMACIAS DEL AHORRO', 'COSTCO', 'HOME DEPOT']
+        name_upper = str(name).upper()
+        return any(brand in name_upper for brand in blacklist)
+
+    def classify_lead(self, row):
+        stars = float(row.get('stars', 0))
+        reviews = int(row.get('reviews', 0))
+        name = row.get('name', '')
+        
+        micro_limit = self.config['segmentation']['micro_max_reviews']
+        good_rating = self.config['segmentation']['good_rating_threshold']
+        
+        if self.is_chain(name):
+            return 'Corporate'
+        
+        # Corporate signal: > micro_limit reviews
+        if reviews > micro_limit: 
+            return 'Corporate'
+        
+        # Micro signal: <= micro_limit reviews (including 0)
+        if reviews <= micro_limit:
+            if reviews == 0:
+                return 'Micro' # New or unreviewed business
+            elif stars >= good_rating:
+                return 'Micro' # Reviewed and okay/good rating
+        
+        return 'Other'
+
+    @staticmethod
     def is_business_closed(full_text):
         """
         Checks if the business listing text indicates it is closed.
@@ -405,8 +386,6 @@ class GoogleMapsScraper:
             return False
         
         # Check against known keywords
-        # Case insensitive check might be safer or keeping exact match as requested
-        # We'll use the exact keywords from before but make it robust
         keywords = [
             "Temporarily closed",
             "Permanently closed",
@@ -419,6 +398,64 @@ class GoogleMapsScraper:
                 return True
         return False
 
+    async def _extract_listing_data_via_js(self, page, business_name):
+        """
+        Isolated JS extraction logic for stars and reviews.
+        """
+        return await page.evaluate(rf'''
+            (name) => {{
+                // Safe selector: find by role and then filter by attribute in JS
+                const articles = Array.from(document.querySelectorAll('div[role="article"]'));
+                const article = articles.find(a => a.getAttribute('aria-label') === name);
+                
+                if (!article) return {{stars: 0, reviews: 0}};
+                
+                // Find all spans with aria-label containing stars/estrellas or reviews/opiniones
+                const spans = Array.from(article.querySelectorAll('span[aria-label], button[aria-label]'));
+                let stars = 0;
+                let reviews = 0;
+                
+                for (const s of spans) {{
+                    const label = s.getAttribute('aria-label');
+                    if (!label) continue;
+                    
+                    // Stars check
+                    if (label.includes('stars') || label.includes('estrellas')) {{
+                        const sMatch = label.match(/(\d+([.,]\d+)?)/);
+                        if (sMatch) stars = parseFloat(sMatch[1].replace(',', '.'));
+                    }}
+                    
+                    // Reviews check (match the number explicitly BEFORE the word)
+                    if (label.includes('reviews') || label.includes('opiniones') || label.includes('Reviews') || label.includes('Opiniones')) {{
+                        // Match format "XX opiniones" or "XX reviews"
+                        const rMatch = label.match(/([\d,.]+)\s*(opiniones|reviews)/i);
+                        if (rMatch) reviews = parseInt(rMatch[1].replace(/[.,]/g, ''));
+                        else {{
+                            // Fallback if the layout is different but the word is there
+                            const rMatchAny = label.match(/([\d,.]+)/g);
+                            // If there are multiple numbers (e.g. rating and reviews), reviews is usually the last/largest one
+                            if (rMatchAny && rMatchAny.length > 1) {{
+                                reviews = parseInt(rMatchAny[rMatchAny.length - 1].replace(/[.,]/g, ''));
+                            }} else if (rMatchAny) {{
+                                 // If only one number but we know it's a review span (e.g. separate from rating span)
+                                if (!label.includes('stars') && !label.includes('estrellas')) {{
+                                    reviews = parseInt(rMatchAny[0].replace(/[.,]/g, ''));
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+                
+                // Fallback for reviews: text inside parentheses (e.g., "(161)")
+                if (reviews === 0) {{
+                    const textMatch = article.innerText.match(/\(([\d,.]+)\)/);
+                    if (textMatch) reviews = parseInt(textMatch[1].replace(/[.,]/g, ''));
+                }}
+                
+                return {{stars, reviews}};
+            }}
+        ''', business_name)
+
     # ... (rest of class) ...
 
     def save_to_db(self):
@@ -429,7 +466,7 @@ class GoogleMapsScraper:
         if not self.results:
             return
 
-        conn = sqlite3.connect('data/leads.db')
+        conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         
         # Create table if not exists with PRIMARY KEY constraint
@@ -470,7 +507,7 @@ class GoogleMapsScraper:
 
         conn.commit()
         conn.close()
-        print(f"Data saved to database (data/leads.db) - {new_count} new rows added (duplicates ignored).")
+        print(f"Data saved to database ({self.db_path}) - {new_count} new rows added (duplicates ignored).")
 
     def save_data(self):
         """
@@ -541,38 +578,8 @@ class GoogleMapsScraper:
         print(f"[INFO] Processing: {len(df)} unique items. {len(df_valid)} valid phones. {len(df_pending)} pending.")
 
         # 4. SEGMENTATION STRATEGY (Applied only to df_valid)
-        blacklist = ['OXXO', '7-ELEVEN', 'WALMART', 'OFFICE DEPOT', 'HEB', 'SORIANA', 'FARMACIAS GUADALAJARA', 'FARMACIAS DEL AHORRO', 'COSTCO', 'HOME DEPOT']
-        
-        def is_chain(name):
-            name_upper = str(name).upper()
-            return any(brand in name_upper for brand in blacklist)
-
-        def classify_lead(row):
-            stars = float(row.get('stars', 0))
-            reviews = int(row.get('reviews', 0))
-            name = row.get('name', '')
-            
-            micro_limit = self.config['segmentation']['micro_max_reviews']
-            good_rating = self.config['segmentation']['good_rating_threshold']
-            
-            if is_chain(name):
-                return 'Corporate'
-            
-            # Corporate signal: > micro_limit reviews
-            if reviews > micro_limit: 
-                return 'Corporate'
-            
-            # Micro signal: <= micro_limit reviews (including 0)
-            if reviews <= micro_limit:
-                if reviews == 0:
-                    return 'Micro' # New or unreviewed business
-                elif stars >= good_rating:
-                    return 'Micro' # Reviewed and okay/good rating
-            
-            return 'Other'
-
         if not df_valid.empty:
-            df_valid['segment'] = df_valid.apply(classify_lead, axis=1)
+            df_valid['segment'] = df_valid.apply(lambda row: self.classify_lead(row), axis=1)
             # Remove any residual duplicates just in case before splitting
             df_valid.drop_duplicates(subset=['name', 'phone'], inplace=True)
             
