@@ -69,9 +69,3 @@ frontend/.vercel
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
 **/.DS_Store
-
-# Scraper Outputs
-leads/
-
-# Test Fixtures
-tests/fixtures/
