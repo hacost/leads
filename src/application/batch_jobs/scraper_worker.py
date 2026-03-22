@@ -20,8 +20,8 @@ async def process_next_job() -> bool:
     city_name = job['city_name']
     category_name = job['category_name']
 
-    # 2. Marcar como procesando
-    StorageService.update_job_status(job_id, 'processing')
+    # 2. Iniciar procesamiento. 
+    # El status 'processing' ya fue asignado atómicamente por get_pending_job().
     print(f"🔄 [Worker] Iniciando Job #{job_id} para {category_name} en {city_name} (Owner: {owner_id})")
 
     bot = Bot(token=TELEGRAM_BOT_TOKEN) if TELEGRAM_BOT_TOKEN else None
