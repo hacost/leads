@@ -260,16 +260,30 @@ class StorageService:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
+                UPDATE batch_jobs 
+                SET status='processing', updated_at=CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT id FROM batch_jobs 
+                    WHERE status='pending' 
+                    ORDER BY created_at ASC 
+                    LIMIT 1
+                )
+                RETURNING id;
+            ''')
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            job_id = row['id']
+            cursor.execute('''
                 SELECT j.*, c.name as category_name, m.name as city_name 
                 FROM batch_jobs j
                 JOIN tenant_categories c ON j.category_id = c.id
                 JOIN master_cities m ON j.city_id = m.id
-                WHERE j.status='pending'
-                ORDER BY j.created_at ASC
-                LIMIT 1
-            ''')
-            row = cursor.fetchone()
-            return dict(row) if row else None
+                WHERE j.id=?
+            ''', (job_id,))
+            full_row = cursor.fetchone()
+            return dict(full_row) if full_row else None
 
     @staticmethod
     def update_job_status(job_id: int, status: str):
