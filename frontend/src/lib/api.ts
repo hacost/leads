@@ -1,6 +1,6 @@
 import { useAuthStore } from "./store"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8050"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 interface FetchOptions extends RequestInit {
   data?: any
