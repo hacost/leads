@@ -121,8 +121,6 @@ class StorageService:
             shutil.rmtree(specific_dir, ignore_errors=True)
             print(f"   🧹 [Limpieza] Carpeta de sesión eliminada: {specific_dir}")
 
-            print(f"   🧹 [Limpieza] Carpeta de sesión eliminada: {specific_dir}")
-
     # ==========================================
     # LÓGICA DE BASE DE DATOS PARA ALERTAS (PHASE 2)
     # ==========================================
