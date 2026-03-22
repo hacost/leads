@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import Optional
 from src.infrastructure.database.storage_service import StorageService
 from src.domain.engine.scrapers.scraper import GoogleMapsScraper
@@ -80,7 +81,8 @@ async def main_loop(interval_seconds: int = 10):
             processed = await process_next_job()
             # Si no procesó nada, duerme más tiempo para no abusar de la DB.
             # Si procesó algo, duerme el intervalo mínimo antes de tomar el siguiente.
-            await asyncio.sleep(interval_seconds if not processed else 2)
+            delay = int(os.environ.get("JOB_DELAY_SECONDS", 60))
+            await asyncio.sleep(interval_seconds if not processed else delay)
         except Exception as e:
             print(f"❌ [Worker] Error en el loop principal: {e}")
             await asyncio.sleep(interval_seconds)
