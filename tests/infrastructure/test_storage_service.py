@@ -82,3 +82,57 @@ class TestStorageServiceTDD:
         # Verificar que si es de otro owner, SI crea una nueva
         other_owner_id = StorageService.get_or_create_category("plomeros", "user_999")
         assert other_owner_id != original_id
+
+    @patch("builtins.print")
+    @patch("os.path.exists")
+    @patch("shutil.rmtree")
+    def test_eliminar_sesion_no_tiene_print_duplicado(self, mock_rmtree, mock_exists, mock_print):
+        """Verifica que eliminar_sesion() no genere output duplicado."""
+        mock_exists.return_value = True
+        StorageService.eliminar_sesion("test_session_123")
+        assert mock_print.call_count == 1, "El print se llamó múltiples veces de manera duplicada."
+
+    def test_get_pending_job_es_atomico(self):
+        """Verifica que get_pending_job() obtiene y actualiza el estado en una sola operación atómica."""
+        import tempfile
+        import os
+        from src.infrastructure.database.storage_service import _init_db
+        
+        fd, temp_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        
+        try:
+            with patch("src.infrastructure.database.storage_service.DB_PATH", temp_path):
+                # DDL
+                _init_db()
+                
+                # Insert database state
+                with sqlite3.connect(temp_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("INSERT INTO master_cities (id, name, state, country) VALUES (1, 'City', 'State', 'Country')")
+                    cursor.execute("INSERT INTO tenant_categories (id, name, owner_id) VALUES (1, 'Category', 'owner')")
+                    cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (1, 1, 1, 'owner', 'pending')")
+                    cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (2, 1, 1, 'owner', 'pending')")
+                    conn.commit()
+                
+                # Call the method
+                job = StorageService.get_pending_job()
+                assert job is not None, "El job recuperado es None, probablemente falló la inserción MOCK"
+                
+                assert 'id' in job, f"job no contiene 'id'. Contenido: {job}"
+                assert job['id'] == 1
+                
+                # Verifies the current status in DB
+                with sqlite3.connect(temp_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT status FROM batch_jobs WHERE id=1")
+                    status1 = cursor.fetchone()[0]
+                    assert status1 == 'processing', f"Se esperaba 'processing' de forma atómica, pero se encontró '{status1}'"
+                    
+                    # Validate that the second job is untouched
+                    cursor.execute("SELECT status FROM batch_jobs WHERE id=2")
+                    status2 = cursor.fetchone()[0]
+                    assert status2 == 'pending', f"El job secundario se modificó a '{status2}'"
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)

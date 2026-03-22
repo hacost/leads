@@ -63,7 +63,6 @@ class TestScraperWorker:
 
         # 3. Asserts
         assert result is True
-        mock_storage.update_job_status.assert_any_call(101, 'processing')
         mock_storage.update_job_status.assert_any_call(101, 'completed')
         
         # Verificar que el bot envió el mensaje de inicio y el documento final
@@ -105,3 +104,22 @@ class TestScraperWorker:
             mock_bot_inst.send_message.assert_called()
             # El código real usa "fallo interno"
             assert "fallo" in mock_bot_inst.send_message.call_args[1]['text'].lower()
+
+    @patch("src.application.batch_jobs.scraper_worker.asyncio.sleep")
+    @patch("src.application.batch_jobs.scraper_worker.process_next_job")
+    async def test_job_delay_usa_variable_de_entorno(self, mock_process, mock_sleep, monkeypatch):
+        """Verifica que el Worker respeta la variable JOB_DELAY_SECONDS del entorno en lugar de 2."""
+        import asyncio
+        from src.application.batch_jobs.scraper_worker import main_loop
+        
+        # Primera vuelta procesa algo (True), segunda arroja CancelledError para romper el bucle infinito
+        mock_process.side_effect = [True, asyncio.CancelledError()]
+        monkeypatch.setenv("JOB_DELAY_SECONDS", "45")
+        
+        with pytest.raises(asyncio.CancelledError):
+            await main_loop()
+            
+        # El código actual de scraper_worker.py arrojará error aquí pues fallará 
+        # en inyectar el JOB_DELAY_SECONDS de la env en lugar de '2'.
+        mock_sleep.assert_any_call(45)
+

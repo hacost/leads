@@ -53,6 +53,6 @@ Cualquier Ingeniero / Agente IA que toque este código **debe** apegarse a las s
 *   **Fase 4 (Outreach Automatizado y CRM):**
     *   Integrar WAHA (WhatsApp HTTP API) vía Docker OrbStack.
     *   Crear Agente LangGraph capaz de redactar mensajes proactivos a los leads extraídos generados por el Worker.
-    *   Enganchar HubSpot CRM para capturar Webhooks de WAHA.
+  
 
 ---
