@@ -1,22 +1,40 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Download, FileJson, Building2, MapPin, Phone, Star } from "lucide-react"
+import api from "@/lib/api"
 
-const MOCK_RESULTS = [
-  { id: "1", name: "Dental Clinic Monterrey", phone: "+52 81 1234 5678", address: "Av. Constitución 123", rating: 4.8, reviews: 142 },
-  { id: "2", name: "Smile Specialists", phone: "+52 81 9876 5432", address: "San Pedro Garza Garcia 456", rating: 4.5, reviews: 89 },
-  { id: "3", name: "Kids Care Dental", phone: "+52 81 5555 4444", address: "Cumbres 3er Sector", rating: 5.0, reviews: 210 },
-  { id: "4", name: "Monterrey Orthodontics", phone: "No phone", address: "Centro Monterrey", rating: 3.9, reviews: 15 },
-]
+interface Lead {
+  name: string
+  phone: string
+  address: string
+  stars: number
+  reviews: number
+}
 
 export default function JobResultsPage({ params }: { params: { job_id: string } }) {
   const [search, setSearch] = useState("")
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const filteredResults = MOCK_RESULTS.filter(r => 
+  useEffect(() => {
+    const fetchLeads = async () => {
+      try {
+        const data = await api.get<Lead[]>(`/api/leads/${params.job_id}`)
+        setLeads(data)
+      } catch (error) {
+        console.error("Error fetching leads:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchLeads()
+  }, [params.job_id])
+
+  const filteredResults = leads.filter(r => 
     r.name.toLowerCase().includes(search.toLowerCase()) || 
     r.phone.includes(search)
   )
@@ -62,15 +80,21 @@ export default function JobResultsPage({ params }: { params: { job_id: string } 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredResults.length === 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-48 text-center text-slate-500">
+                  Loading leads...
+                </TableCell>
+              </TableRow>
+            ) : filteredResults.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="h-48 text-center text-slate-500">
                   No leads found. Job might still be running or encountered an error.
                 </TableCell>
               </TableRow>
             ) : (
-              filteredResults.map((result) => (
-                <TableRow key={result.id} className="border-slate-800 hover:bg-slate-800/30">
+              filteredResults.map((result, idx) => (
+                <TableRow key={idx} className="border-slate-800 hover:bg-slate-800/30">
                   <TableCell className="font-semibold text-slate-200">
                     <div className="flex items-start gap-3">
                       <Building2 className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
@@ -92,8 +116,8 @@ export default function JobResultsPage({ params }: { params: { job_id: string } 
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1 text-slate-200">
                       <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-                      <span className="font-bold">{result.rating.toFixed(1)}</span>
-                      <span className="text-slate-500 text-xs ml-1">({result.reviews})</span>
+                      <span className="font-bold">{(result.stars || 0).toFixed(1)}</span>
+                      <span className="text-slate-500 text-xs ml-1">({result.reviews || 0})</span>
                     </div>
                   </TableCell>
                 </TableRow>

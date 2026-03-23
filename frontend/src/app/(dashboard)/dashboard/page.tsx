@@ -14,16 +14,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [masterSwitch, setMasterSwitch] = useState(true)
+  const [workerHealth, setWorkerHealth] = useState({ status: 'offline', last_heartbeat: null })
   const [toggling, setToggling] = useState(false)
 
   const fetchDashboardData = async () => {
     try {
-      const [jobsData, workerData] = await Promise.all([
+      const [jobsData, workerConfig, healthData] = await Promise.all([
         api.get<any[]>('/api/jobs'),
-        api.get<{is_enabled: boolean}>('/api/admin/worker')
+        api.get<{is_enabled: boolean}>('/api/admin/worker'),
+        api.get<{status: string, last_heartbeat: any}>('/api/admin/worker/health')
       ])
       setJobs(jobsData || [])
-      if (workerData) setMasterSwitch(workerData.is_enabled)
+      if (workerConfig) setMasterSwitch(workerConfig.is_enabled)
+      if (healthData) setWorkerHealth(healthData)
       setError(null)
     } catch (err: any) {
       setError(err?.message || "Failed to load dashboard data")
@@ -98,6 +101,14 @@ export default function DashboardPage() {
             <p className="text-xs text-slate-500 mt-1">
               {masterSwitch ? "Worker is active and polling." : "Worker is currently paused."}
             </p>
+            <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Worker Status</span>
+              <Badge variant="outline" className={`text-[10px] ${
+                workerHealth.status === 'online' ? 'border-green-500/50 text-green-400 bg-green-500/10' : 'border-red-500/50 text-red-400 bg-red-500/10'
+              }`}>
+                {workerHealth.status.toUpperCase()}
+              </Badge>
+            </div>
           </CardContent>
           {masterSwitch && <div className="absolute bottom-0 left-0 h-1 w-full bg-green-500/20 animate-shimmer" />}
         </Card>

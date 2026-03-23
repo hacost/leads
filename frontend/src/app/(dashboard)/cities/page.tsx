@@ -24,6 +24,9 @@ export default function MasterCitiesPage() {
   const [editState, setEditState] = useState("")
   const [editCountry, setEditCountry] = useState("")
 
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+
   const handleEditClick = (city: any) => {
     setEditingId(city.id)
     setEditName(city.name)
@@ -59,8 +62,10 @@ export default function MasterCitiesPage() {
   }
 
   const fetchCities = async () => {
+    setLoading(true)
     try {
-      const res = await api.get<any[]>('/api/cities')
+      const offset = (page - 1) * limit
+      const res = await api.get<any[]>(`/api/cities?limit=${limit}&offset=${offset}`)
       setCities(res || [])
     } catch (e) {
       toast.error("Failed to load cities")
@@ -71,7 +76,7 @@ export default function MasterCitiesPage() {
 
   useEffect(() => {
     fetchCities()
-  }, [])
+  }, [page, limit])
 
   const handleCreate = async () => {
     if (!newName.trim() || !newState.trim() || !newCountry.trim()) return
@@ -112,12 +117,26 @@ export default function MasterCitiesPage() {
       </div>
 
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <Input 
-          placeholder="Search by city or state..." 
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="bg-slate-950 border-slate-700 max-w-sm"
-        />
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <Input 
+            placeholder="Search by city or state..." 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-slate-950 border-slate-700 max-w-sm"
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 whitespace-nowrap">Show:</span>
+            <select 
+              value={limit} 
+              onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+              className="bg-slate-950 border-slate-700 text-slate-300 text-sm rounded-md p-2 outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {[10, 20, 30, 50, 100].map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className="flex w-full sm:w-auto gap-2">
             <Input 
               placeholder="City Name" 
@@ -212,6 +231,31 @@ export default function MasterCitiesPage() {
             )}
           </TableBody>
         </Table>
+      </div>
+      <div className="flex justify-between items-center pt-2">
+        <p className="text-xs text-slate-500">
+          Showing {cities.length} results (Page {page})
+        </p>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1 || loading}
+            className="border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+          >
+            Previous
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setPage(p => p + 1)}
+            disabled={cities.length < limit || loading}
+            className="border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
   )

@@ -27,6 +27,9 @@ export default function CreateBatchPage() {
   const [selectedCities, setSelectedCities] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
+  
+  const [cityPage, setCityPage] = useState(1)
+  const cityLimit = 20
 
   const [newCatName, setNewCatName] = useState("")
   const [isCreatingCat, setIsCreatingCat] = useState(false)
@@ -36,30 +39,37 @@ export default function CreateBatchPage() {
   const [newCityCountry, setNewCityCountry] = useState("Mexico")
   const [isCreatingCity, setIsCreatingCity] = useState(false)
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [catsRes, citiesRes] = await Promise.all([
-          api.get<any[]>('/api/categories'),
-          api.get<any[]>('/api/cities')
-        ])
-        setCategories(catsRes || [])
-        setCities(citiesRes || [])
-      } catch (e: any) {
-        toast.error("Failed to fetch initial data")
-        setCategories([])
-        setCities([])
-      } finally {
-        setLoading(false)
-      }
+  const fetchCities = async () => {
+    setLoading(true)
+    try {
+      const offset = (cityPage - 1) * cityLimit
+      const res = await api.get<any[]>(`/api/cities?limit=${cityLimit}&offset=${offset}`)
+      setCities(res || [])
+    } catch (e) {
+      toast.error("Failed to load cities")
+    } finally {
+      setLoading(false)
     }
-    fetchData()
+  }
+
+  const fetchCategories = async () => {
+    try {
+      const res = await api.get<any[]>('/api/categories?limit=100')
+      setCategories(res || [])
+    } catch (e) {
+      toast.error("Failed to load categories")
+    }
+  }
+
+  useEffect(() => {
+    fetchCategories()
   }, [])
 
-  const filteredCities = cities.filter(c => 
-    (c.name || "").toLowerCase().includes(searchCity.toLowerCase()) ||
-    (c.state || "").toLowerCase().includes(searchCity.toLowerCase())
-  )
+  useEffect(() => {
+    fetchCities()
+  }, [cityPage])
+
+  const filteredCities = cities // Pagination already handles search focus (could add server search later)
 
   const handleSelectAll = () => {
     if (selectedCities.length === filteredCities.length) {
@@ -241,25 +251,33 @@ export default function CreateBatchPage() {
                         Loading cities...
                       </div>
                     ) : filteredCities.length === 0 ? (
-                  <p className="text-center text-slate-500 py-10">No cities match your search.</p>
-                ) : (
-                  filteredCities.map(city => (
-                    <div key={city.id} className="flex items-center space-x-3 bg-slate-900 p-2 rounded hover:bg-slate-800/50 transition-colors">
-                      <Checkbox 
-                        id={`city-${city.id}`} 
-                        checked={selectedCities.includes(city.id)}
-                        onCheckedChange={() => toggleCity(city.id)}
-                        className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                      />
-                      <Label 
-                        htmlFor={`city-${city.id}`}
-                        className="flex-1 cursor-pointer font-medium text-slate-200"
-                      >
-                        {city.name} <span className="text-slate-500 text-sm ml-2">{city.state}</span>
-                      </Label>
-                    </div>
-                  ))
-                )}
+                      <p className="text-center py-10 text-slate-500">No cities found.</p>
+                    ) : (
+                      filteredCities.map(city => (
+                        <div key={city.id} className="flex items-center space-x-3 bg-slate-900 p-2 rounded hover:bg-slate-800/50 transition-colors">
+                          <Checkbox 
+                            id={`city-${city.id}`} 
+                            checked={selectedCities.includes(city.id.toString())}
+                            onCheckedChange={() => toggleCity(city.id.toString())}
+                            className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                          />
+                          <Label 
+                            htmlFor={`city-${city.id}`}
+                            className="flex-1 cursor-pointer font-medium text-slate-200"
+                          >
+                            {city.name} <span className="text-slate-500 text-sm ml-2">{city.state}</span>
+                          </Label>
+                        </div>
+                      ))
+                    )}
+              </div>
+              
+              <div className="flex justify-between items-center mt-2 px-1">
+                <span className="text-[10px] text-slate-500 uppercase tracking-tighter">Page {cityPage}</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-7 text-xs border-slate-700" onClick={() => setCityPage(p => Math.max(1, p - 1))} disabled={cityPage === 1 || loading}>Prev</Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs border-slate-700" onClick={() => setCityPage(p => p + 1)} disabled={cities.length < cityLimit || loading}>Next</Button>
+                </div>
               </div>
             </CardContent>
           </Card>

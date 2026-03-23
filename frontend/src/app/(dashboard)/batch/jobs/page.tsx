@@ -17,10 +17,15 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
+  
+  // Pagination State
+  const [page, setPage] = useState(0)
+  const [limit, setLimit] = useState(10)
 
   const fetchJobs = async () => {
     try {
-      const data = await api.get<any[]>('/api/jobs')
+      const offset = page * limit
+      const data = await api.get<any[]>(`/api/jobs?limit=${limit}&offset=${offset}`)
       setJobs(data || [])
     } catch (err) {
       console.error(err)
@@ -29,11 +34,20 @@ export default function JobsPage() {
     }
   }
 
+  const handleRetry = async (jobId: number) => {
+    try {
+      await api.patch(`/api/jobs/${jobId}/retry`, {})
+      fetchJobs() // Refresh list
+    } catch (err) {
+      console.error("Failed to retry job:", err)
+    }
+  }
+
   useEffect(() => {
     fetchJobs()
-    const interval = setInterval(fetchJobs, 30000)
+    const interval = setInterval(fetchJobs, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [page, limit]) // Refetch on page or limit change
 
   const filteredJobs = jobs.filter(job => {
     const rawStatus = job.status === 'processing' ? 'running' : job.status;
@@ -56,13 +70,25 @@ export default function JobsPage() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl">
-        <div className="flex-1">
+        <div className="flex-1 flex items-center gap-4">
           <Input 
             placeholder="Search by category or city..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="bg-slate-950 border-slate-700 max-w-sm"
           />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 whitespace-nowrap">Show:</span>
+            <select 
+              value={limit} 
+              onChange={(e) => { setLimit(Number(e.target.value)); setPage(0); }}
+              className="bg-slate-950 border-slate-700 text-slate-300 text-sm rounded-md p-2 outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {[10, 20, 30, 50, 100].map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value || "all")}>
           <SelectTrigger className="w-[180px] bg-slate-950 border-slate-700">
@@ -145,7 +171,13 @@ export default function JobsPage() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       {uiStatus === 'failed' && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-400 hover:text-orange-300 hover:bg-orange-400/10" title="Retry Job">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-orange-400 hover:text-orange-300 hover:bg-orange-400/10" 
+                          title="Retry Job"
+                          onClick={() => handleRetry(job.id)}
+                        >
                           <RotateCcw className="h-4 w-4" />
                         </Button>
                       )}
@@ -161,6 +193,32 @@ export default function JobsPage() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="flex items-center justify-between px-2">
+        <p className="text-sm text-slate-500">
+          Showing page {page + 1}
+        </p>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-slate-900 border-slate-800 text-white disabled:opacity-50"
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={page === 0}
+          >
+            Previous
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-slate-900 border-slate-800 text-white disabled:opacity-50"
+            onClick={() => setPage(p => p + 1)}
+            disabled={jobs.length < limit}
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
   )
