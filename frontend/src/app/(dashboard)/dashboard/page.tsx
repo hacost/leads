@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Activity, CheckCircle, Clock, AlertTriangle, PlayCircle } from "lucide-react"
+import { Activity, CheckCircle, Clock, AlertTriangle, PlayCircle, ToggleRight, ToggleLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -35,10 +35,11 @@ export default function DashboardPage() {
   const toggleMasterSwitch = async () => {
     setToggling(true)
     try {
-      const resp = await api.patch<{is_enabled: boolean}>('/api/admin/worker', { enabled: !masterSwitch })
+      // Backend expects 'is_enabled' as defined in src/presentation/api/admin.py
+      const resp = await api.patch<{is_enabled: boolean}>('/api/admin/worker', { is_enabled: !masterSwitch })
       setMasterSwitch(resp.is_enabled)
     } catch (err: any) {
-      alert("Failed to toggle Master Switch")
+      alert("Failed to toggle Master Switch: " + (err?.message || "Unknown error"))
     } finally {
       setToggling(false)
     }
@@ -72,24 +73,33 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-slate-900 border-slate-800 relative overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">Master Switch</CardTitle>
-            <button 
-              onClick={toggleMasterSwitch} 
-              disabled={toggling}
-              className={`p-1 rounded-full hover:bg-slate-800 transition-colors ${masterSwitch ? 'text-green-500' : 'text-slate-500'}`}
-              title="Toggle Worker ON/OFF"
-            >
-              <Activity className="h-4 w-4" />
-            </button>
+            <Activity className={`h-4 w-4 ${masterSwitch ? 'text-green-500 animate-pulse' : 'text-slate-600'}`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${masterSwitch ? 'text-green-500' : 'text-slate-500'}`}>
-              {toggling ? '...' : (masterSwitch ? 'ON' : 'OFF')}
+            <div className="flex items-center justify-between">
+              <div className={`text-2xl font-bold ${masterSwitch ? 'text-green-500' : 'text-slate-500'}`}>
+                {toggling ? '...' : (masterSwitch ? 'ON' : 'OFF')}
+              </div>
+              <button 
+                onClick={toggleMasterSwitch} 
+                disabled={toggling}
+                className={`transition-all duration-300 transform active:scale-95 ${toggling ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {masterSwitch ? (
+                  <ToggleRight className="h-10 w-10 text-green-500 fill-green-500/20" />
+                ) : (
+                  <ToggleLeft className="h-10 w-10 text-slate-600" />
+                )}
+              </button>
             </div>
-            <p className="text-xs text-slate-500 mt-1">Worker execution state</p>
+            <p className="text-xs text-slate-500 mt-1">
+              {masterSwitch ? "Worker is active and polling." : "Worker is currently paused."}
+            </p>
           </CardContent>
+          {masterSwitch && <div className="absolute bottom-0 left-0 h-1 w-full bg-green-500/20 animate-shimmer" />}
         </Card>
 
         <Card className="bg-slate-900 border-slate-800">
