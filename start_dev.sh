@@ -50,16 +50,18 @@ echo -e "${RED}Presiona Ctrl+C para detener TODOS los servicios.${NC}\n"
 cleanup() {
     printf "\n${RED}Deteniendo todos los servicios de desarrollo...${NC}\n"
     
-    # Enviar señal de terminación a los procesos
+    # Intentar matar educadamente (SIGTERM)
     kill -TERM $BOT_PID $WORKER_PID $API_PID $FRONTEND_PID 2>/dev/null
     
-    # Esperar silenciosamente a que terminen de apagar
-    base_services=( $BOT_PID $WORKER_PID $API_PID $FRONTEND_PID )
-    for pid in "${base_services[@]}"; do
-        wait $pid 2>/dev/null
-    done
+    # Matar cualquier proceso hijo rezagado (especialmente de node/next)
+    pkill -P $$ 2>/dev/null
+    
+    # Esperar un momento y forzar (SIGKILL) si siguen vivos
+    sleep 1
+    kill -9 $BOT_PID $WORKER_PID $API_PID $FRONTEND_PID 2>/dev/null
     
     printf "¡Hasta luego!\n"
+    # Salir forzosamente para liberar la terminal
     exit 0
 }
 
