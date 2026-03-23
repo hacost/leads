@@ -12,7 +12,7 @@ class CategoryCreate(BaseModel):
     name: str
 
 @router.get("", response_model=List[TenantCategory])
-async def get_categories(current_user: dict = Depends(get_current_user)):
+async def get_categories(limit: int = 100, offset: int = 0, current_user: dict = Depends(get_current_user)):
     """
     Returns categories scoped to the currently authenticated tenant.
     """
@@ -20,7 +20,7 @@ async def get_categories(current_user: dict = Depends(get_current_user)):
     if not owner_id:
         raise HTTPException(status_code=401, detail="Invalid token")
         
-    categories_dict = StorageService.get_categories(owner_id=owner_id)
+    categories_dict = StorageService.get_categories(owner_id=owner_id, limit=limit, offset=offset)
     return [TenantCategory(**cat) for cat in categories_dict]
 
 @router.post("", response_model=TenantCategory)

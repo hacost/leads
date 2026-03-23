@@ -39,7 +39,7 @@ async def request_otp(data: OTPRequest):
     # Dispatch code via Telegram Bot
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     try:
-        print(f"🧪 [DEBUG TEST] OTP Generado para {data.chat_id}: {code}")
+        logger.info(f"🧪 [DEBUG TEST] OTP Generado para {data.chat_id}: {code}")
         await bot.send_message(
             chat_id=data.chat_id, 
             text=f"🔐 Tu código de acceso a Bastion Core Dashboard es: *{code}*\n\nExpirará en 5 minutos.",

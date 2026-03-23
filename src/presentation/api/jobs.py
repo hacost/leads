@@ -19,15 +19,19 @@ class BatchJobView(BatchJob):
     city_name: Optional[str] = "Unknown"
 
 @router.get("", response_model=List[BatchJobView])
-async def get_jobs(current_user: dict = Depends(get_current_user)):
+async def get_jobs(
+    limit: int = 50, 
+    offset: int = 0, 
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Returns batch jobs scoped to the currently authenticated tenant.
+    Returns batch jobs scoped to the currently authenticated tenant with pagination.
     """
     owner_id = current_user.get("sub")
     if not owner_id:
         raise HTTPException(status_code=401, detail="Invalid token")
         
-    jobs_dict = StorageService.get_jobs(owner_id=owner_id)
+    jobs_dict = StorageService.get_jobs(owner_id=owner_id, limit=limit, offset=offset)
     return [BatchJobView(**job) for job in jobs_dict]
 
 @router.get("/{job_id}", response_model=BatchJobView)
@@ -44,6 +48,26 @@ async def get_job(job_id: int, current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Job not found")
         
     return BatchJobView(**job_dict)
+
+@router.patch("/{job_id}/retry")
+async def retry_job(job_id: int, current_user: dict = Depends(get_current_user)):
+    """
+    Resets a failed job to pending status.
+    """
+    owner_id = current_user.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+        
+    # Primero verificamos que el job le pertenezca al usuario
+    job = StorageService.get_job_by_id(job_id, owner_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found or unauthorized")
+        
+    success = StorageService.retry_job(job_id)
+    if not success:
+        return {"message": "Job rescheduled for processing"} # Si rowcount fue 0 es porque ya estaba pending o no cambió
+    
+    return {"message": "Job rescheduled for processing"}
 
 @router.post("", response_model=BatchJob)
 async def create_job(job: JobCreate, current_user: dict = Depends(get_current_user)):

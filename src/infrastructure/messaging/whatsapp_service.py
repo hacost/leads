@@ -41,7 +41,7 @@ class WhatsAppService:
                 timeout=5
             )
         except requests.exceptions.RequestException as e:
-            print(f"Error al iniciar sesión WAHA: {e}")
+            logger.info(f"Error al iniciar sesión WAHA: {e}")
 
     @staticmethod
     def formatear_numero(numero: str) -> str:
@@ -70,30 +70,30 @@ class WhatsAppService:
         }
         
         try:
-            print(f"   [WAHA] Enviando mensaje a {chat_id}...")
+            logger.info(f"   [WAHA] Enviando mensaje a {chat_id}...")
             response = requests.post(f"{WAHA_BASE_URL}/api/sendText", json=payload, timeout=10)
             if response.status_code in [200, 201]:
-                print(f"   ✅ [WAHA] Mensaje enviado exitosamente.")
+                logger.info(f"   ✅ [WAHA] Mensaje enviado exitosamente.")
                 return True
             else:
-                print(f"   ❌ [WAHA] Error enviando mensaje: {response.text}")
+                logger.info(f"   ❌ [WAHA] Error enviando mensaje: {response.text}")
                 return False
         except requests.exceptions.RequestException as e:
-            print(f"   ❌ [WAHA] Servidor local no responde: {e}")
+            logger.info(f"   ❌ [WAHA] Servidor local no responde: {e}")
             return False
 
 # Prueba rápida manual
 if __name__ == "__main__":
-    print("Iniciando prueba de conexión con WAHA...")
+    logger.info("Iniciando prueba de conexión con WAHA...")
     WhatsAppService.iniciar_sesion()
     time.sleep(2)
     
     if WhatsAppService.checar_estado():
-        print("✅ Servidor WAHA conectado y celular sincronizado.")
+        logger.info("✅ Servidor WAHA conectado y celular sincronizado.")
         # Escribe aquí un teléfono real para probar (ej. 5512345678)
         WhatsAppService.enviar_mensaje("8116607645", "¡Hola Mundo desde Scalio!")
     else:
-        print("❌ El servidor WAHA no está conectado o falta escanear el QR.")
+        logger.info("❌ El servidor WAHA no está conectado o falta escanear el QR.")
         qr = WhatsAppService.obtener_qr()
         """
         si qr != "":

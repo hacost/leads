@@ -11,11 +11,9 @@ from src.application.ai_agents.agent_service import procesar_mensaje_agente
 from src.application.batch_jobs.scheduler_service import SchedulerService
 from src.core.config import AGENT_NAME, USER_TITLE, TELEGRAM_BOT_TOKEN
 
-# Habilitamos el registro de errores (Logging)
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
+from src.core.logging_config import setup_logging
+# Configuración global de logs del Bot
+logger = setup_logging("BOT")
 
 # ==========================================
 # LÓGICA DE TELEGRAM
@@ -23,7 +21,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 async def enviar_mensaje_acceso_denegado(update: Update, chat_id: int):
     """Maneja y responde a los intentos de acceso no autorizados."""
-    print(f"⚠️ INTENTO DE ACCESO BLOQUEADO. Chat ID Invalido: {chat_id}")
+    logger.warning(f"⚠️ INTENTO DE ACCESO BLOQUEADO. Chat ID Invalido: {chat_id}")
     await update.message.reply_text(f"🛑 Acceso Denegado. El Chat ID ({chat_id}) no está en la lista blanca del {USER_TITLE}.")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,7 +51,7 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await enviar_mensaje_acceso_denegado(update, chat_id)
         return
         
-    print(f"\n[👤 {USER_TITLE}]: {texto_usuario}")
+    logger.info(f"[👤 {USER_TITLE}]: {texto_usuario}")
     mensaje_estado = await update.message.reply_text("🤔 Pensando...")
     
     try:
@@ -97,7 +95,7 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(temp_path):
             os.remove(temp_path)
             
-        print(f"\n[🎙️ {USER_TITLE} (Voz)]: {texto_usuario}")
+        logger.info(f"[🎙️ {USER_TITLE} (Voz)]: {texto_usuario}")
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=mensaje_estado.message_id,
@@ -113,7 +111,7 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
     except Exception as e:
-        print(f"❌ Error al procesar audio: {str(e)}")
+        logger.error(f"❌ Error al procesar audio: {str(e)}", exc_info=True)
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=mensaje_estado.message_id,
@@ -140,10 +138,10 @@ async def on_startup(app: Application):
 def main():
     """Función principal que enciende el servidor de Telegram."""
     if not TELEGRAM_BOT_TOKEN:
-        print("❌ CRÍTICO: No encontré TELEGRAM_BOT_TOKEN en el archivo .env")
+        logger.error("❌ CRÍTICO: No encontré TELEGRAM_BOT_TOKEN en el archivo .env")
         return
         
-    print("🤖 Encendiendo Agente y conectando con Telegram...")
+    logger.info("🤖 Encendiendo Agente y conectando con Telegram...")
     # Construimos la aplicación de Telegram y registramos el hook de inicio
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(on_startup).build()
     
@@ -159,7 +157,7 @@ def main():
     # Manejador Global de Errores para que los fallos de Red de Telegram no inunden tu terminal
     app.add_error_handler(error_handler)
     
-    print("✅ ¡Bot listo y escuchando mensajes (y Audios!) en Telegram! (Presiona Ctrl+C para detener)")
+    logger.info("✅ ¡Bot listo y escuchando mensajes (y Audios!) en Telegram! (Presiona Ctrl+C para detener)")
     
     # Arrancamos el ciclo infinito de "Long Polling"
     app.run_polling()

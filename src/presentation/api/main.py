@@ -1,10 +1,23 @@
+import logging
 from fastapi import FastAPI
+from src.core.logging_config import setup_logging
+
+# Setup senior logging for API
+setup_logging("API")
+
+# Forzar formato en loggers de uvicorn que suelen ignorar el root logger
+for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+    uv_logger = logging.getLogger(logger_name)
+    for handler in uv_logger.handlers:
+        from src.core.logging_config import ComponentFormatter
+        handler.setFormatter(ComponentFormatter("API"))
 from fastapi.middleware.cors import CORSMiddleware
 from src.presentation.api.auth import router as auth_router
 from src.presentation.api.master_cities import router as master_cities_router
 from src.presentation.api.categories import router as categories_router
 from src.presentation.api.jobs import router as jobs_router
 from src.presentation.api.admin import router as admin_router
+from src.presentation.api.leads import router as leads_router
 
 app = FastAPI(
     title="Bastion Core API",
@@ -27,6 +40,7 @@ app.include_router(master_cities_router)
 app.include_router(categories_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)
+app.include_router(leads_router)
 
 @app.get("/health")
 def health_check():

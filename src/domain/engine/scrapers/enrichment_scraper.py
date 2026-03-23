@@ -35,12 +35,12 @@ class EnrichmentScraper:
         
     async def process_leads(self):
         if not os.path.exists(self.input_file):
-            print(f"Input file {self.input_file} not found.")
+            logger.info(f"Input file {self.input_file} not found.")
             return
 
         # Load as string to avoid type issues with N/A values
         df = pd.read_excel(self.input_file, dtype=str)
-        print(f"Loaded {len(df)} pending leads.")
+        logger.info(f"Loaded {len(df)} pending leads.")
         
         # Normalize columns to avoid "nan" string issues
         df.replace("nan", "N/A", inplace=True)
@@ -62,10 +62,10 @@ class EnrichmentScraper:
                 # Skip if we already checked it (marked as Enriched)
                 source_curr = str(row.get('source', '')).strip()
                 if "Enriched" in source_curr:
-                     print(f"[{index+1}/{len(df)}] Skipping {row['name']} (Already Enriched)")
+                     logger.info(f"[{index+1}/{len(df)}] Skipping {row['name']} (Already Enriched)")
                      continue
                 
-                print(f"\n[{index+1}/{len(df)}] Processing: {row['name']} ({row['zone']})")
+                logger.info(f"\n[{index+1}/{len(df)}] Processing: {row['name']} ({row['zone']})")
                 
                 try:
                     # Google Search
@@ -77,7 +77,7 @@ class EnrichmentScraper:
                         # Common selectors for "Accept all" or "Rechazar todo"
                         consent_button = await page.query_selector('button:has-text("Aceptar todo"), button:has-text("Accept all")')
                         if consent_button:
-                            print("  [INFO] Clicking Google Consent...")
+                            logger.info("  [INFO] Clicking Google Consent...")
                             await consent_button.click()
                             await page.wait_for_timeout(1000)
                     except:
@@ -89,7 +89,7 @@ class EnrichmentScraper:
                     await search_box.press("Enter")
                     
                     # Wait for results while allowing manual Captcha solving
-                    print("  [WAIT] Waiting up to 60s for results (or solve Captcha manually)...")
+                    logger.info("  [WAIT] Waiting up to 60s for results (or solve Captcha manually)...")
                     found_results = False
                     for i in range(12): # 12 * 5s = 60s
                         try:
@@ -97,18 +97,18 @@ class EnrichmentScraper:
                             # Checking for common result indicators: h3, #search, #rso
                             if await page.query_selector('#search') or await page.query_selector('h3'):
                                 found_results = True
-                                print("  [INFO] Results page detected! Continuing...")
+                                logger.info("  [INFO] Results page detected! Continuing...")
                                 break
                         except Exception as e:
                             # Context destroyed means page navigated (good sign), retry next loop.
                             pass
                         
                         # Wait 5 seconds before checking again
-                        print(f"  ...waiting ({i+1}/12 checks)...")
+                        logger.info(f"  ...waiting ({i+1}/12 checks)...")
                         await page.wait_for_timeout(5000)
                     
                     if not found_results:
-                         print("  [WARN] No results found after 60s (or Captcha not solved).")
+                         logger.info("  [WARN] No results found after 60s (or Captcha not solved).")
 
                     # Extract Best Facebook Result
                     # 1. Get all links
@@ -124,7 +124,7 @@ class EnrichmentScraper:
                              break
                     
                     if fb_url:
-                        print(f"  Found FB URL: {fb_url}")
+                        logger.info(f"  Found FB URL: {fb_url}")
                         # Ensure we don't overwrite map_url by mistake
                         # df.at[index, 'map_url'] = fb_url # Removed to preserve original Google Maps URL
                         
@@ -145,7 +145,7 @@ class EnrichmentScraper:
                         # 1. Post-to-Page Navigation: If we landed on a specific post, try to go to the main page first
                         is_post = any(x in fb_url.lower() for x in ["/posts/", "/photos/", "/videos/", "/permalink/", "/fbid="])
                         if is_post:
-                            print("  [INFO] landed on a post. Attempting to navigate to Page Profile for full info...")
+                            logger.info("  [INFO] landed on a post. Attempting to navigate to Page Profile for full info...")
                             try:
                                 page_links = await page.query_selector_all('strong a, h1 a, h2 a, a[role="link"]:has-text("")')
                                 for pl in page_links:
@@ -153,7 +153,7 @@ class EnrichmentScraper:
                                     if href_pl and "facebook.com" in href_pl and not any(x in href_pl.lower() for x in ["/posts/", "/photos/", "/videos/"]):
                                         await pl.click()
                                         await page.wait_for_timeout(3000)
-                                        print(f"  [INFO] Navigated to Page: {page.url}")
+                                        logger.info(f"  [INFO] Navigated to Page: {page.url}")
                                         break
                             except:
                                 pass
@@ -180,7 +180,7 @@ class EnrichmentScraper:
                         valid_emails = [e for e in email_matches if "example.com" not in e and ".png" not in e and ".jpg" not in e]
                         if valid_emails:
                             email = valid_emails[0].strip()
-                            print(f"  [SUCCESS] Found Email: {email}")
+                            logger.info(f"  [SUCCESS] Found Email: {email}")
                             df.at[index, 'email'] = str(email)
 
                         # Search for 'tel:' links in Profile
@@ -190,7 +190,7 @@ class EnrichmentScraper:
                             raw_tel = re.sub(r'[^\d]', '', href_tel)
                             if len(raw_tel) >= 10:
                                 found_phone = raw_tel[-10:]
-                                print(f"  [SUCCESS] Found Phone (via Profile tel: link): {found_phone}")
+                                logger.info(f"  [SUCCESS] Found Phone (via Profile tel: link): {found_phone}")
 
                         # Regex on Intro Text
                         if not found_phone:
@@ -206,12 +206,12 @@ class EnrichmentScraper:
                                         final_num = clean_num[-10:]
                                         if not final_num.startswith("1000"):
                                             found_phone = final_num
-                                            print(f"  [SUCCESS] Found Phone (via Intro text): {found_phone}")
+                                            logger.info(f"  [SUCCESS] Found Phone (via Intro text): {found_phone}")
                                             break
 
                         # --- STRATEGY B: POSTS (First 3 only) ---
                         if not found_phone:
-                            print("  [INFO] Phone not found in Intro, searching first 3 posts...")
+                            logger.info("  [INFO] Phone not found in Intro, searching first 3 posts...")
                             try:
                                 # Facebook often uses elements with role="article" for posts
                                 posts = await page.query_selector_all('div[role="article"]')
@@ -230,7 +230,7 @@ class EnrichmentScraper:
                                         wa_num = wa_match.group(1)
                                         if len(wa_num) >= 10:
                                             found_phone = wa_num[-10:]
-                                            print(f"  [SUCCESS] Found Phone (via WhatsApp link): {found_phone}")
+                                            logger.info(f"  [SUCCESS] Found Phone (via WhatsApp link): {found_phone}")
                                             break
                                             
                                 # If no WA link, check the aggregated text of the first 3 posts
@@ -246,30 +246,30 @@ class EnrichmentScraper:
                                                 final_num = clean_num[-10:]
                                                 if not final_num.startswith("1000"):
                                                     found_phone = final_num
-                                                    print(f"  [SUCCESS] Found Phone (via Post text): {found_phone}")
+                                                    logger.info(f"  [SUCCESS] Found Phone (via Post text): {found_phone}")
                                                     break
                             except Exception as e:
-                                print(f"  [WARN] Error scanning posts: {e}")
+                                logger.info(f"  [WARN] Error scanning posts: {e}")
 
                         # Save Final Result (Ensure "N/A" if nothing found)
                         if found_phone:
                             df.at[index, 'phone'] = str(found_phone)
                             df.at[index, 'source'] = 'Enriched (FB Phone Captured)'
                         else:
-                            print(f"  [Partial] FB found but no valid 10-digit phone found.")
+                            logger.info(f"  [Partial] FB found but no valid 10-digit phone found.")
                             df.at[index, 'phone'] = "N/A"
                             df.at[index, 'source'] = 'Enriched (FB Contact Info Missing)'
                     else:
-                         print(f"  No Facebook link found in results.")
+                         logger.info(f"  No Facebook link found in results.")
                          # df.at[index, 'source'] = 'Enriched (Not Found)'
                 except Exception as e:
-                    print(f"  Error: {e}")
+                    logger.info(f"  Error: {e}")
                 
                 # Save progress row by row
                 df.to_excel(self.output_file, index=False)
                 
             await browser.close()
-            print("\nEnrichment Complete.")
+            logger.info("\nEnrichment Complete.")
 
 if __name__ == "__main__":
     enricher = EnrichmentScraper()

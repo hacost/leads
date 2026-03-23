@@ -39,7 +39,7 @@ class FacebookSearchScraper:
         }
         
         try:
-            print(f"  -> Visiting: {url}")
+            logger.info(f"  -> Visiting: {url}")
             await page.goto(url, wait_until="domcontentloaded", timeout=15000)
             await asyncio.sleep(2) # Allow elements to render
             
@@ -108,7 +108,7 @@ class FacebookSearchScraper:
                             data['phone'] = cleaned
                             
         except Exception as e:
-            print(f"  [!] Error parsing {url}: {e}")
+            logger.info(f"  [!] Error parsing {url}: {e}")
             
         return data
 
@@ -123,17 +123,17 @@ class FacebookSearchScraper:
         extracted_fb_urls = []
         
         for query_idx, query in enumerate(queries):
-            print(f"\n[SEARCH {query_idx+1}/{len(queries)}] Querying Google: {query}")
+            logger.info(f"\n[SEARCH {query_idx+1}/{len(queries)}] Querying Google: {query}")
             
             url = f"https://www.google.com/search?q={query}"
             await page.goto(url, wait_until="domcontentloaded")
             
             # Give the user time to solve Captcha if it appears
-            print("  [WAIT] Waiting up to 60s for results (or solve Captcha manually)...")
+            logger.info("  [WAIT] Waiting up to 60s for results (or solve Captcha manually)...")
             for i in range(12): # 12 * 5s = 60s
                 try:
                     if await page.query_selector('#search') or await page.query_selector('h3'):
-                        print("  [INFO] Results page detected! Continuing...")
+                        logger.info("  [INFO] Results page detected! Continuing...")
                         break
                 except:
                     pass
@@ -141,12 +141,12 @@ class FacebookSearchScraper:
             
             # Scrape Google Results (max 10 pages for now)
             for i in range(10):
-                print(f"  Scraping Google Page {i+1} for query {query_idx+1}...")
+                logger.info(f"  Scraping Google Page {i+1} for query {query_idx+1}...")
                 # Wait for search results
                 try:
                     await page.wait_for_selector('div#search', timeout=5000)
                 except:
-                    print("  [!] No search results container found. Possibly a Captcha or no results.")
+                    logger.info("  [!] No search results container found. Possibly a Captcha or no results.")
                     break
                     
                 # Extract links
@@ -195,7 +195,7 @@ class FacebookSearchScraper:
                 except:
                      break
                      
-        print(f"  Found {len(extracted_fb_urls)} unique Facebook URLs to process across all queries.")
+        logger.info(f"  Found {len(extracted_fb_urls)} unique Facebook URLs to process across all queries.")
         return extracted_fb_urls
 
     async def run(self, categories, zones):
@@ -221,7 +221,7 @@ class FacebookSearchScraper:
         
     def save_data(self):
         if not self.results:
-            print("No results found.")
+            logger.info("No results found.")
             return
             
         df = pd.DataFrame(self.results)
@@ -240,11 +240,11 @@ class FacebookSearchScraper:
         df = pd.concat([df_valid, df_pending], ignore_index=True)
         
         if len(df) < initial_len:
-            print(f"  [INFO] Filtered out {initial_len - len(df)} duplicate leads before saving.")
+            logger.info(f"  [INFO] Filtered out {initial_len - len(df)} duplicate leads before saving.")
         
         from src.infrastructure.database.storage_service import StorageService
         file_path = StorageService.guardar_excel(df, self.session_id, "facebook_direct_leads.xlsx")
-        print(f"\n[SUCCESS] Exported {len(df)} Facebook leads a través de StorageService en {file_path}")
+        logger.info(f"\n[SUCCESS] Exported {len(df)} Facebook leads a través de StorageService en {file_path}")
 
 async def main():
     parser = argparse.ArgumentParser(description="Facebook Direct Search Scraper")
@@ -253,23 +253,23 @@ async def main():
     parser.add_argument('--session-id', type=str, help="Session ID to save the results")
     args = parser.parse_args()
 
-    print("Welcome to the Facebook Direct Search Scraper")
-    print("---------------------------------------------")
+    logger.info("Welcome to the Facebook Direct Search Scraper")
+    logger.info("---------------------------------------------")
     
     if args.zones and args.categories:
         zones_input = args.zones
         cats_input = args.categories
     else:
-        print("Enter the zones/cities (separated by semicolon). Example: Monterrey; San Pedro")
+        logger.info("Enter the zones/cities (separated by semicolon). Example: Monterrey; San Pedro")
         zones_input = input("Zones: ")
-        print("Enter the categories (separated by semicolon). Example: Tiendas de abarrotes; Esteticas")
+        logger.info("Enter the categories (separated by semicolon). Example: Tiendas de abarrotes; Esteticas")
         cats_input = input("Categories: ")
     
     zones = [z.strip() for z in zones_input.split(";") if z.strip()]
     categories = [c.strip() for c in cats_input.split(";") if c.strip()]
     
     if not zones or not categories:
-        print("Error: Provide at least one zone and category.")
+        logger.info("Error: Provide at least one zone and category.")
         return
         
     scraper = FacebookSearchScraper(session_id=args.session_id)

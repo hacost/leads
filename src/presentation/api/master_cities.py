@@ -9,11 +9,11 @@ from src.presentation.api.auth import get_current_user
 router = APIRouter(prefix="/api/cities", tags=["Master Cities"])
 
 @router.get("", response_model=List[MasterCity])
-async def get_master_cities(current_user: dict = Depends(get_current_user)):
+async def get_master_cities(limit: int = 100, offset: int = 0, current_user: dict = Depends(get_current_user)):
     """
     Returns the global catalog of Master Cities available for scraping.
     """
-    cities_dict = StorageService.get_master_cities()
+    cities_dict = StorageService.get_master_cities(limit=limit, offset=offset)
     return [MasterCity(**city) for city in cities_dict]
 
 class CityCreate(BaseModel):

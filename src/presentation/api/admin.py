@@ -16,3 +16,8 @@ async def get_worker_status(current_user: dict = Depends(get_current_user)):
 async def set_worker_status(payload: WorkerToggle, current_user: dict = Depends(get_current_user)):
     StorageService.set_worker_enabled(payload.is_enabled)
     return {"is_enabled": payload.is_enabled, "message": "Worker configuration updated"}
+
+@router.get("/worker/health")
+async def get_worker_health(current_user: dict = Depends(get_current_user)):
+    """Devuelve el estado de vida (heartbeat) del worker."""
+    return StorageService.get_worker_health()

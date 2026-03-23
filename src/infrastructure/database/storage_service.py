@@ -3,9 +3,13 @@ import glob
 import glob
 import sqlite3
 import json
+import logging
 from typing import List, Dict, Optional
 
+logger = logging.getLogger(__name__)
+
 DB_PATH = "data/bastion_bot.db"
+LEADS_DB_PATH = "data/leads.db"
 
 def _init_db():
     os.makedirs("data", exist_ok=True)
@@ -33,7 +37,7 @@ def _init_db():
         # Seeder for master_cities
         cursor.execute("SELECT COUNT(*) FROM master_cities")
         if cursor.fetchone()[0] == 0:
-            print("   [DB Seeder] Poblando master_cities por defecto...")
+            logger.info("   [DB Seeder] Poblando master_cities por defecto...")
             cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Monterrey', 'NL', 'Mexico', 1)")
             cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Guadalajara', 'JAL', 'Mexico', 1)")
             cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Puebla', 'PUE', 'Mexico', 1)")
@@ -148,7 +152,7 @@ class StorageService:
         if os.path.exists(specific_dir):
             import shutil
             shutil.rmtree(specific_dir, ignore_errors=True)
-            print(f"   🧹 [Limpieza] Carpeta de sesión eliminada: {specific_dir}")
+            logger.info(f"   🧹 [Limpieza] Carpeta de sesión eliminada: {specific_dir}")
 
     # ==========================================
     # LÓGICA DE BASE DE DATOS PARA ALERTAS (PHASE 2)
@@ -196,11 +200,11 @@ class StorageService:
     # ==========================================
 
     @staticmethod
-    def get_master_cities():
+    def get_master_cities(limit: int = 100, offset: int = 0):
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM master_cities WHERE status=1")
+            cursor.execute("SELECT * FROM master_cities WHERE status=1 LIMIT ? OFFSET ?", (limit, offset))
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
@@ -248,11 +252,21 @@ class StorageService:
             return cursor.lastrowid
 
     @staticmethod
-    def get_categories(owner_id: str):
+    def get_city_by_name(name: str) -> Optional[dict]:
+        """Busca una ciudad por nombre exacto (case-insensitive) para validación."""
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM tenant_categories WHERE owner_id=? AND status=1", (owner_id,))
+            cursor.execute("SELECT * FROM master_cities WHERE name COLLATE NOCASE = ?", (name,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    @staticmethod
+    def get_categories(owner_id: str, limit: int = 100, offset: int = 0):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM tenant_categories WHERE owner_id=? AND status=1 LIMIT ? OFFSET ?", (owner_id, limit, offset))
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
@@ -300,18 +314,20 @@ class StorageService:
             return cursor.lastrowid
 
     @staticmethod
-    def get_jobs(owner_id: str):
+    def get_jobs(owner_id: str, limit: int = 50, offset: int = 0):
+        """Returns batch jobs scoped to the tenant with pagination support."""
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute('''
+            cursor.execute(f'''
                 SELECT j.*, c.name as category_name, m.name as city_name 
                 FROM batch_jobs j
                 JOIN tenant_categories c ON j.category_id = c.id
                 JOIN master_cities m ON j.city_id = m.id
                 WHERE j.owner_id=?
                 ORDER BY j.created_at DESC
-            ''', (owner_id,))
+                LIMIT ? OFFSET ?
+            ''', (owner_id, limit, offset))
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
@@ -332,6 +348,40 @@ class StorageService:
             if row:
                 return dict(row)
             return None
+
+    @staticmethod
+    def retry_job(job_id: int) -> bool:
+        """Resetea un job fallido a estado pendiente para ser re-procesado."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE batch_jobs SET status='pending', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (job_id,)
+            )
+            conn.commit()
+            return cursor.rowcount > 1
+
+    @staticmethod
+    def get_leads_for_job(job_id: int, owner_id: str) -> List[dict]:
+        """Obtiene los leads reales de la DB de leads que coinciden con la zona/categoría del job."""
+        job = StorageService.get_job_by_id(job_id, owner_id)
+        if not job:
+            return []
+            
+        city_name = job['city_name']
+        cat_name = job['category_name']
+        # GoogleMapsScraper guarda la zona como "Categoría en Ciudad"
+        search_query = f"{cat_name} en {city_name}"
+        
+        if not os.path.exists(LEADS_DB_PATH):
+            return []
+            
+        with sqlite3.connect(LEADS_DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            # Filtramos por zona (que es el search_query)
+            cursor.execute("SELECT * FROM leads WHERE zone = ?", (search_query,))
+            return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
     def create_job(category_id: int, city_id: int, owner_id: str) -> int:
@@ -403,6 +453,37 @@ class StorageService:
             cursor = conn.cursor()
             cursor.execute("UPDATE batch_jobs SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (status, job_id))
             conn.commit()
+
+    @staticmethod
+    def set_worker_heartbeat():
+        """Actualiza el timestamp del worker para monitoreo de salud."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO worker_config (key, value) VALUES ('last_heartbeat', CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value=CURRENT_TIMESTAMP
+            ''')
+            conn.commit()
+
+    @staticmethod
+    def get_worker_health() -> dict:
+        """Calcula el estado del worker basado en el último heartbeat."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM worker_config WHERE key = 'last_heartbeat'")
+            row = cursor.fetchone()
+            if not row:
+                return {"status": "offline", "last_heartbeat": None}
+            
+            # Simple check: si el heartbeat es de hace más de 1 minuto, está offline
+            # SQLite CURRENT_TIMESTAMP está en UTC.
+            cursor.execute("SELECT (strftime('%s', 'now') - strftime('%s', value)) < 60 FROM worker_config WHERE key = 'last_heartbeat'")
+            is_recent = cursor.fetchone()[0]
+            
+            return {
+                "status": "online" if is_recent else "offline",
+                "last_heartbeat": row[0]
+            }
 
 
 # Puedes usar estas funciones simples importándolas directamente

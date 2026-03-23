@@ -21,24 +21,44 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== Iniciando Entorno de Desarrollo de Bastión Core ===${NC}\n"
 
+# Deshabilitar buffering de Python para logs en tiempo real
+export PYTHONUNBUFFERED=1
+
+# 0. Limpieza agresiva de procesos huérfanos
+echo -e "${YELLOW}Limpiando procesos anteriores...${NC}"
+pkill -9 -f "main.py" 2>/dev/null
+pkill -9 -f "scraper_worker" 2>/dev/null
+pkill -9 -f "uvicorn" 2>/dev/null
+lsof -ti:8000 | xargs kill -9 2>/dev/null
+lsof -ti:3000 | xargs kill -9 2>/dev/null
+
+# 0.5 Preparar directorio y marca de tiempo para archivos
+mkdir -p logs
+TS=$(date +"%Y-%m-%d_%H-%M-%S")
+
+# Definir el binario de python de la venv para estabilidad absoluta
+PY="./.venv/bin/python3"
+
 # 1. Iniciar el Bot de Telegram (Polling Interface)
 echo -e "${YELLOW}[1/4] Iniciando Bot de Telegram...${NC}"
-uv run main.py &
+$PY -u main.py > "logs/[$TS] [BOT].log" 2>&1 &
 BOT_PID=$!
 
 # 2. Iniciar el Scraper Worker (Async Background Jobs)
 echo -e "${YELLOW}[2/4] Iniciando Scraper Worker (Cola asíncrona)...${NC}"
-uv run python -m src.application.batch_jobs.scraper_worker &
+$PY -u -m src.application.batch_jobs.scraper_worker > "logs/[$TS] [WORKER].log" 2>&1 &
 WORKER_PID=$!
 
 # 3. Iniciar la API de FastAPI (Backend)
 echo -e "${YELLOW}[3/4] Iniciando FastAPI Backend en el puerto 8000...${NC}"
-uv run python -m uvicorn src.presentation.api.main:app --port 8000 --reload &
+./.venv/bin/uvicorn src.presentation.api.main:app --port 8000 > "logs/[$TS] [API].log" 2>&1 &
 API_PID=$!
 
-# 4. Iniciar el Frontend (Next.js Dashboard)
+# 4. Iniciar el Frontend (Next.js Dashboard) con inyección de timestamps
 echo -e "${YELLOW}[4/4] Iniciando Next.js Frontend en el puerto 3000...${NC}"
-cd frontend && npm run dev &
+(cd frontend && npm run dev 2>&1 | while read -r line; do
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] [FRONTEND] $line"
+done > "../logs/[$TS] [FRONTEND].log") &
 FRONTEND_PID=$!
 
 echo -e "\n${GREEN}Todos los servicios (4/4) han sido iniciados correctamente.${NC}"

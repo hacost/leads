@@ -52,7 +52,7 @@ class GoogleMapsScraper:
                     defaults['segmentation'].update(loaded.get('segmentation', {}))
                     defaults['search'].update(loaded.get('search', {}))
             except Exception as e:
-                print(f"[WARN] Could not load config.json ({e}). Using defaults.")
+                logger.info(f"[WARN] Could not load config.json ({e}). Using defaults.")
         return defaults
 
     def load_known_leads(self):
@@ -89,9 +89,9 @@ class GoogleMapsScraper:
                     self.known_leads[key] = data
             
             conn.close()
-            print(f"[CACHE] Loaded {len(self.known_leads)} existing leads from database.")
+            logger.info(f"[CACHE] Loaded {len(self.known_leads)} existing leads from database.")
         except Exception as e:
-            print(f"[CACHE] Error loading cache: {e}")
+            logger.info(f"[CACHE] Error loading cache: {e}")
 
     async def scrape(self, zones, categories):
         """
@@ -116,12 +116,12 @@ class GoogleMapsScraper:
             for zone in zones:
                 for category in categories:
                     search_query = f"{category} en {zone}"
-                    print(f"\n--- Searching for: {search_query} ---")
+                    logger.info(f"\n--- Searching for: {search_query} ---")
                     
                     try:
                         await self.search_and_extract(page, search_query)
                     except Exception as e:
-                        print(f"Error scraping {search_query}: {e}")
+                        logger.info(f"Error scraping {search_query}: {e}")
 
             await browser.close()
             return self.results
@@ -148,7 +148,7 @@ class GoogleMapsScraper:
             await page.fill(search_box_selector, query)
             await page.press(search_box_selector, 'Enter')
         except Exception as e:
-            print(f"Could not find search box: {e}")
+            logger.info(f"Could not find search box: {e}")
             # Check for consent page or other blockers?
             return
         
@@ -157,14 +157,14 @@ class GoogleMapsScraper:
         try:
              await page.wait_for_selector('div[role="feed"]', timeout=10000)
         except:
-            print(f"No results found for {query} or layout changed.")
+            logger.info(f"No results found for {query} or layout changed.")
             return
 
         # Scroll to load all results
         # We find the feed element and scroll it repeatedly.
         feed_selector = 'div[role="feed"]'
         
-        print("Scrolling results...")
+        logger.info("Scrolling results...")
         previous_height = 0
         scroll_attempts = 0
         max_scroll_attempts = 5  # Increased retries for stability
@@ -195,9 +195,9 @@ class GoogleMapsScraper:
             if new_height == previous_height:
                 scroll_attempts += 1
                 if scroll_attempts >= max_scroll_attempts:
-                    print("Reached end of list or no new items loaded.")
+                    logger.info("Reached end of list or no new items loaded.")
                     break
-                print(f"No new items... retrying ({scroll_attempts}/{max_scroll_attempts})")
+                logger.info(f"No new items... retrying ({scroll_attempts}/{max_scroll_attempts})")
             else:
                 scroll_attempts = 0 # Reset attempts if we found new content
                 previous_height = new_height
@@ -209,13 +209,13 @@ class GoogleMapsScraper:
                      return feed ? feed.querySelectorAll("div > div[role='article']").length : 0;
                 }}
             ''', feed_selector)
-            print(f"Loaded {items} items...", end='\r')
+            logger.info(f"Loaded {items} items...", end='\r')
 
-        print(f"\nFinished scrolling. extracting details...")
+        logger.info(f"\nFinished scrolling. extracting details...")
 
         # Select all listing items
         listings = await page.query_selector_all(f'{feed_selector} > div > div[role="article"]')
-        print(f"Found {len(listings)} listings to process.")
+        logger.info(f"Found {len(listings)} listings to process.")
         
         for i, listing in enumerate(listings):
             data = {}
@@ -237,7 +237,7 @@ class GoogleMapsScraper:
             try:
                 full_text = await listing.inner_text()
                 if self.is_business_closed(full_text):
-                    print(f"[{i+1}/{len(listings)}] [SKIPPED] Closed: {name}")
+                    logger.info(f"[{i+1}/{len(listings)}] [SKIPPED] Closed: {name}")
                     continue
             except:
                 pass
@@ -253,7 +253,7 @@ class GoogleMapsScraper:
                 data['_from_cache'] = True # Flag to avoid re-saving to DB
                 
                 self.results.append(data)
-                print(f"[{i+1}/{len(listings)}] [CACHE] Loaded from DB: {name}")
+                logger.info(f"[{i+1}/{len(listings)}] [CACHE] Loaded from DB: {name}")
                 continue
 
             # Process detail extraction (If not in cache)
@@ -291,7 +291,7 @@ class GoogleMapsScraper:
                     data['reviews'] = js_data.get('reviews', 0)
 
                 except Exception as e:
-                    print(f"Error extracting reviews via JS: {e}")
+                    logger.info(f"Error extracting reviews via JS: {e}")
                     data['stars'] = 0.0
                     data['reviews'] = 0
 
@@ -301,14 +301,14 @@ class GoogleMapsScraper:
                 if len(norm_phone) >= 10: 
                     norm_phone = norm_phone[-10:]
                     if norm_phone in self.seen_phones:
-                        print(f"  [SKIPPED] Phone {norm_phone} already processed: {data['name']}")
+                        logger.info(f"  [SKIPPED] Phone {norm_phone} already processed: {data['name']}")
                         continue
                     self.seen_phones.add(norm_phone)
                 else:
                     # If no valid phone, fallback to normalized name
                     norm_name = "".join(filter(str.isalnum, data['name'].lower()))
                     if norm_name in self.seen_names:
-                        print(f"  [SKIPPED] Name '{data['name']}' already processed (no phone).")
+                        logger.info(f"  [SKIPPED] Name '{data['name']}' already processed (no phone).")
                         continue
                     self.seen_names.add(norm_name)
                 
@@ -316,7 +316,7 @@ class GoogleMapsScraper:
                 data['map_url'] = page.url
 
             except Exception as ex:
-                print(f"Error extracting details for {data['name']}: {ex}")
+                logger.info(f"Error extracting details for {data['name']}: {ex}")
                 data['phone'] = "Error"
                 data['address'] = "Error"
                 data['map_url'] = page.url
@@ -324,12 +324,12 @@ class GoogleMapsScraper:
             # FACEBOOK FALLBACK (DISABLED FOR SPEED - DEFERRED ENRICHMENT)
             # if phone is N/A or empty, we mark it but do NOT search now.
             if data.get('phone') in ["N/A", "Error", None, ""]:
-                # print(f"  Phone missing for {data['name']}. Trying Facebook fallback (via Bing)...")
+                # logger.info(f"  Phone missing for {data['name']}. Trying Facebook fallback (via Bing)...")
                 # fb_phone, fb_email, fb_url = await self.get_facebook_contact(page.context, data['name'], query)
                 
                 # Skipping fallback to speed up scraping
                 data['source'] = 'Google Maps (No Phone)'
-                print(f"  [SKIPPED] Phone missing. Marked for pending lookup.")
+                logger.info(f"  [SKIPPED] Phone missing. Marked for pending lookup.")
                 
                 # Logic below is commented out for now
                 # if fb_phone: ...
@@ -340,7 +340,7 @@ class GoogleMapsScraper:
 
             data['zone'] = query
             self.results.append(data)
-            print(f"[{i+1}/{len(listings)}] Extracted: {data['name']} - Stars: {data.get('stars')} - Revs: {data.get('reviews')}")
+            logger.info(f"[{i+1}/{len(listings)}] Extracted: {data['name']} - Stars: {data.get('stars')} - Revs: {data.get('reviews')}")
 
     async def get_facebook_contact(self, context, business_name, zone):
         # ... (Method remains for future use) ...
@@ -507,7 +507,7 @@ class GoogleMapsScraper:
 
         conn.commit()
         conn.close()
-        print(f"Data saved to database ({self.db_path}) - {new_count} new rows added (duplicates ignored).")
+        logger.info(f"Data saved to database ({self.db_path}) - {new_count} new rows added (duplicates ignored).")
 
     def save_data(self):
         """
@@ -520,7 +520,7 @@ class GoogleMapsScraper:
         4. leads_corporate.xlsx: Specialized list for "Corporate/SMB" targets (Accountant).
         """
         if not self.results:
-            print("No data collected to save.")
+            logger.info("No data collected to save.")
             return
 
         df = pd.DataFrame(self.results)
@@ -575,7 +575,7 @@ class GoogleMapsScraper:
         # DATAFRAME FOR PENDING LOOKUP (NO PHONE)
         df_pending = df[df['phone'] == "N/A"].copy()
         
-        print(f"[INFO] Processing: {len(df)} unique items. {len(df_valid)} valid phones. {len(df_pending)} pending.")
+        logger.info(f"[INFO] Processing: {len(df)} unique items. {len(df_valid)} valid phones. {len(df_pending)} pending.")
 
         # 4. SEGMENTATION STRATEGY (Applied only to df_valid)
         if not df_valid.empty:
@@ -586,7 +586,7 @@ class GoogleMapsScraper:
             # Calculate discarded leads (Poor reviews)
             discarded_count = len(df_valid[df_valid['segment'] == 'Other'])
             if discarded_count > 0:
-                print(f"[INFO] Discarded {discarded_count} leads due to poor Google ratings (< {self.config['segmentation']['good_rating_threshold']} stars).")
+                logger.info(f"[INFO] Discarded {discarded_count} leads due to poor Google ratings (< {self.config['segmentation']['good_rating_threshold']} stars).")
             
             # Update Master List (df_valid) to ONLY include Micro and Corporate
             df_valid = df_valid[df_valid['segment'].isin(['Micro', 'Corporate'])].copy()
@@ -600,45 +600,45 @@ class GoogleMapsScraper:
         # 5. EXPORTS (No duplicates, no missing phones in master/micro/corporate)
         
         from src.infrastructure.database.storage_service import StorageService
-        print(f"\n📁 Guardando todos los archivos exportados usando StorageService...")
+        logger.info(f"\n📁 Guardando todos los archivos exportados usando StorageService...")
         
         # A. Master List (Valid Phones Only)
         try:
             if not df_valid.empty:
                 file_path = StorageService.guardar_excel(df_valid.drop(columns=['segment'], errors='ignore'), self.session_id, "leads_google_maps.xlsx")
-                print(f"[SUCCESS] Exported {len(df_valid)} unique leads to {file_path}")
+                logger.info(f"[SUCCESS] Exported {len(df_valid)} unique leads to {file_path}")
         except Exception as e:
-            print(f"[ERROR] Master Export: {e}")
+            logger.info(f"[ERROR] Master Export: {e}")
 
         # B. Micro List (Valid Phones Only)
         try:
             if not df_micro.empty:
                 file_path = StorageService.guardar_excel(df_micro.drop(columns=['segment'], errors='ignore'), self.session_id, "leads_micro.xlsx")
-                print(f"[SUCCESS] Exported {len(df_micro)} unique MICRO leads to {file_path}")
+                logger.info(f"[SUCCESS] Exported {len(df_micro)} unique MICRO leads to {file_path}")
         except Exception as e:
-             print(f"[ERROR] Micro Export: {e}")
+             logger.info(f"[ERROR] Micro Export: {e}")
 
         # C. Corporate List (Valid Phones Only)
         try:
             if not df_corporate.empty:
                 file_path = StorageService.guardar_excel(df_corporate.drop(columns=['segment'], errors='ignore'), self.session_id, "leads_corporate.xlsx")
-                print(f"[SUCCESS] Exported {len(df_corporate)} unique CORPORATE leads to {file_path}")
+                logger.info(f"[SUCCESS] Exported {len(df_corporate)} unique CORPORATE leads to {file_path}")
         except Exception as e:
-             print(f"[ERROR] Corporate Export: {e}")
+             logger.info(f"[ERROR] Corporate Export: {e}")
              
         # D. Pending List (No Phones)
         try:
             if not df_pending.empty:
                 file_path = StorageService.guardar_excel(df_pending, self.session_id, "leads_pending_lookup.xlsx")
-                print(f"[SUCCESS] Exported {len(df_pending)} unique pending leads to {file_path}")
+                logger.info(f"[SUCCESS] Exported {len(df_pending)} unique pending leads to {file_path}")
         except Exception as e:
-             print(f"[ERROR] Pending Export: {e}")
+             logger.info(f"[ERROR] Pending Export: {e}")
 
         # 5. Save to DB All Data (Valid + Pending)
         try:
             self.save_to_db()
         except Exception as e:
-            print(f"[ERROR] Could not save to Database: {e}")
+            logger.info(f"[ERROR] Could not save to Database: {e}")
 
 async def main():
     parser = argparse.ArgumentParser(description="Google Maps Leads Scraper")
@@ -647,8 +647,8 @@ async def main():
     parser.add_argument('--session-id', type=str, help="Session ID to save the results")
     args = parser.parse_args()
 
-    print("Welcome to the Google Maps Leads Scraper")
-    print("----------------------------------------")
+    logger.info("Welcome to the Google Maps Leads Scraper")
+    logger.info("----------------------------------------")
     
     is_agent = False
     if args.zones and args.categories:
@@ -657,10 +657,10 @@ async def main():
         is_agent = True
     else:
         # User Input
-        print("Enter the zones/cities (separated by semicolon). Example: Monterrey; Santiago, Nuevo Leon")
+        logger.info("Enter the zones/cities (separated by semicolon). Example: Monterrey; Santiago, Nuevo Leon")
         zones_input = input("Zones: ")
         
-        print("Enter the categories (separated by semicolon). Example: Tiendas de abarrotes; Farmacias")
+        logger.info("Enter the categories (separated by semicolon). Example: Tiendas de abarrotes; Farmacias")
         cats_input = input("Categories: ")
     
     # Process inputs
@@ -668,7 +668,7 @@ async def main():
     categories = [c.strip() for c in cats_input.split(";") if c.strip()]
     
     if not zones or not categories:
-        print("Error: You must provide at least one zone and one category.")
+        logger.info("Error: You must provide at least one zone and one category.")
         return
 
     scraper = GoogleMapsScraper(headless_override=True if is_agent else None, session_id=args.session_id)
@@ -676,7 +676,7 @@ async def main():
     
     # Save Results
     scraper.save_data()
-    print("\nJob Completed.")
+    logger.info("\nJob Completed.")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,6 +1,9 @@
 from langchain_core.tools import tool
 from langchain_core.runnables.config import RunnableConfig
 from src.infrastructure.database.storage_service import StorageService
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # 1. REGISTRO DE HERRAMIENTAS (TOOLS)
@@ -19,16 +22,24 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
     """
     owner_id = config.get("configurable", {}).get("thread_id", "default")
-    print(f"\n[🤖 AGENTE ENCOLANDO TRABAJO] -> Google Maps scraper.")
+    logger.info(f"[🤖 AGENTE ENCOLANDO TRABAJO] -> Google Maps scraper.")
     
     lista_zonas = [z.strip() for z in zonas.split(";") if z.strip()]
     lista_cats = [c.strip() for c in categorias.split(";") if c.strip()]
     
     jobs_creados = []
+    zonas_invalidas = []
+    
     for cat_name in lista_cats:
         for zona_name in lista_zonas:
-            # Aseguramos que existan en la DB y obtenemos IDs
-            city_id = StorageService.get_or_create_city(zona_name)
+            # Validar contra ciudades maestras (Gaps Auditoría Sprint 2.5)
+            city_data = StorageService.get_city_by_name(zona_name)
+            if not city_data:
+                logger.warning(f"   ⚠️ [Validación] Ciudad '{zona_name}' no encontrada en la DB maestra.")
+                zonas_invalidas.append(zona_name)
+                continue
+                
+            city_id = city_data['id']
             cat_id = StorageService.get_or_create_category(cat_name, owner_id)
             
             # Encolamos el trabajo
@@ -36,9 +47,15 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
             jobs_creados.append(str(job_id))
     
     if not jobs_creados:
+        if zonas_invalidas:
+            return f"❌ Lo siento, las zonas solicitadas ({', '.join(zonas_invalidas)}) no son zonas operativas permitidas actualmente. Por favor, intenta con Monterrey, San Pedro, CDMX o Puebla."
         return "No se pudieron crear los trabajos de búsqueda. Verifica los parámetros."
         
-    return f"✅ ¡Entendido! He agendado {len(jobs_creados)} búsqueda(s) de extracción (Job IDs: {', '.join(jobs_creados)}). Te enviaré los resultados por este chat en cuanto el proceso termine en segundo plano. ¿Hay algo más en lo que pueda ayudarte mientras tanto?"
+    respuesta = f"✅ ¡Entendido! He agendado {len(jobs_creados)} búsqueda(s) de extracción (Job IDs: {', '.join(jobs_creados)})."
+    if zonas_invalidas:
+        respuesta += f" (Nota: las zonas '{', '.join(zonas_invalidas)}' fueron ignoradas por no ser zonas operativas permitidas)."
+    
+    return respuesta + " Te enviaré los resultados por este chat en cuanto el proceso termine en segundo plano. ¿Hay algo más en lo que pueda ayudarte mientras tanto?"
 
 @tool
 def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfig) -> str:
@@ -49,7 +66,7 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfi
     - categorias: El giro del negocio separado por punto y coma (ej. "Dentistas; Plomeros").
     """
     owner_id = config.get("configurable", {}).get("thread_id", "default")
-    print(f"\n[🤖 AGENTE ENCOLANDO TRABAJO] -> Facebook scraper.")
+    logger.info(f"[🤖 AGENTE ENCOLANDO TRABAJO] -> Facebook scraper.")
     
     lista_zonas = [z.strip() for z in zonas.split(";") if z.strip()]
     lista_cats = [c.strip() for c in categorias.split(";") if c.strip()]
@@ -80,7 +97,7 @@ def gestionar_recordatorio(accion: str, config: RunnableConfig, cron_expression:
     from src.infrastructure.database.storage_service import StorageService
     
     chat_id = config.get("configurable", {}).get("thread_id", "default")
-    print(f"\n[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Gestión de Alertas (Acción: {accion}).")
+    logger.info(f"[🤖 AGENTE EJECUTANDO HERRAMIENTA] -> Gestión de Alertas (Acción: {accion}).")
     
     if accion == "agendar":
         try:

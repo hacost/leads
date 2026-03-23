@@ -1,9 +1,14 @@
 import asyncio
+import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from telegram.ext import Application
 from src.infrastructure.database.storage_service import StorageService
 from src.application.ai_agents.agent_service import procesar_mensaje_agente
+
+import logging
+# El Scheduler usa el logger global configurado por el componente que lo inicia (Bot)
+logger = logging.getLogger(__name__)
 
 class SchedulerService:
     _scheduler = AsyncIOScheduler()
@@ -12,16 +17,17 @@ class SchedulerService:
     @classmethod
     def iniciar(cls, app: Application):
         """Inicia el scheduler y carga las alertas activas desde la base de datos."""
+        logging.getLogger('apscheduler').setLevel(logging.INFO)
         cls._app = app
         cls._scheduler.start()
-        print("⏰ [Scheduler] Iniciando motor de alertas programadas...")
+        logger.info("⏰ [Scheduler] Iniciando motor de alertas programadas...")
         
         # Cargar los jobs persistentes
         alertas = StorageService.obtener_alertas()
         for alerta in alertas:
             cls._programar_job_interno(alerta['id'], alerta['chat_id'], alerta['cron_expression'], alerta['prompt_task'])
         
-        print(f"⏰ [Scheduler] {len(alertas)} alertas cargadas exitosamente.")
+        logger.info(f"⏰ [Scheduler] {len(alertas)} alertas cargadas exitosamente.")
 
     @classmethod
     def agendar_alerta(cls, chat_id: str, cron_expression: str, prompt_task: str) -> int:
@@ -51,16 +57,16 @@ class SchedulerService:
                 args=[chat_id, prompt_task],
                 replace_existing=True
             )
-            print(f"⏰ [Scheduler] Job {job_id} agendado: '{prompt_task}' con cron: {cron_expression}")
+            logger.info(f"⏰ [Scheduler] Job {job_id} agendado: '{prompt_task}' con cron: {cron_expression}")
         except Exception as e:
-            print(f"❌ [Scheduler] Error validando CRON '{cron_expression}': {str(e)}")
+            logger.error(f"❌ [Scheduler] Error validando CRON '{cron_expression}': {str(e)}")
 
     @classmethod
     async def _ejecutar_alerta(cls, chat_id: str, prompt_task: str):
         """Esta es la función que ejecuta APScheduler a la hora acordada."""
-        print(f"\n⏰ [Scheduler Ejecutando] Tarea programada para chat {chat_id}: {prompt_task}")
+        logger.info(f"⏰ [Scheduler Ejecutando] Tarea programada para chat {chat_id}: {prompt_task}")
         if not cls._app:
-            print("❌ [Scheduler] Application de Telegram no referenciada.")
+            logger.error("❌ [Scheduler] Application de Telegram no referenciada.")
             return
 
         bot = cls._app.bot
