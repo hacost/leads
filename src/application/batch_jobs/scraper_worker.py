@@ -50,10 +50,20 @@ async def process_next_job() -> bool:
         # 7. Enviar archivos resultantes y limpiar sesión
         if bot:
             archivos = StorageService.fetch_excel_files_for_session(owner_id)
-            for excel in archivos:
-                nombre = StorageService.obtener_nombre_archivo(excel)
-                with StorageService.obtener_stream_archivo(excel) as document:
-                    await bot.send_document(chat_id=owner_id, document=document)
+            if len(archivos) > 0:
+                await bot.send_message(
+                    chat_id=owner_id, 
+                    text=f"✅ ¡Extracción completada para {category_name} en {city_name}! Aquí están tus reportes clasificados:"
+                )
+                for excel in archivos:
+                    nombre = StorageService.obtener_nombre_archivo(excel)
+                    with StorageService.obtener_stream_archivo(excel) as document:
+                        await bot.send_document(chat_id=owner_id, document=document)
+            else:
+                await bot.send_message(
+                    chat_id=owner_id, 
+                    text=f"✅ Extracción completada para {category_name} en {city_name}. Sin embargo, no se encontraron resultados nuevos (o no tienen teléfono/email públicos para clasificar)."
+                )
             StorageService.eliminar_sesion(owner_id)
             
         return True
@@ -76,8 +86,20 @@ async def main_loop(interval_seconds: int = 10):
     Bucle infinito que mantiene vivo al worker consultando la cola.
     """
     print("🚀 [Worker] Scraper Worker Iniciado. Escuchando cola batch_jobs...")
+    was_paused = False
     while True:
         try:
+            if not StorageService.get_worker_enabled():
+                if not was_paused:
+                    print("⏸️ [Worker] En pausa. Master Switch desactivado.")
+                    was_paused = True
+                await asyncio.sleep(interval_seconds)
+                continue
+                
+            if was_paused:
+                print("▶️ [Worker] Reanudando. Master Switch activado.")
+                was_paused = False
+
             processed = await process_next_job()
             # Si no procesó nada, duerme más tiempo para no abusar de la DB.
             # Si procesó algo, duerme el intervalo mínimo antes de tomar el siguiente.

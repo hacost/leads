@@ -19,6 +19,10 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 allowed_chats_env = os.getenv("ALLOWED_CHAT_IDS", "")
 ALLOWED_CHAT_IDS = [int(cid.strip()) for cid in allowed_chats_env.split(",")] if allowed_chats_env else []
 
+# Seguridad: Lista de Administradores
+admin_chats_env = os.getenv("ADMIN_CHAT_IDS", "")
+ADMIN_CHAT_IDS = [int(cid.strip()) for cid in admin_chats_env.split(",")] if admin_chats_env else []
+
 # Modelo LLM Elegido
 LLM_MODEL = os.getenv("LLM_MODEL", "groq").lower()
 

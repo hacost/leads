@@ -62,9 +62,9 @@ async def verify_otp(data: OTPVerify):
     if store_data["code"] != data.code:
         raise HTTPException(status_code=400, detail="Invalid OTP code")
         
-    # Provide a simple check to grant global admin vs regular tenant views
-    # Ideally this would come from the database in the future
-    is_admin = True # Make everyone an admin for now until user specifies which chat_id is the master admin
+    # Evaluate proper RBAC using the strict security rules
+    from src.core.security import es_admin
+    is_admin = es_admin(int(data.chat_id))
 
     payload = {
         "sub": data.chat_id,

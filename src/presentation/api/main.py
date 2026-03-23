@@ -4,6 +4,7 @@ from src.presentation.api.auth import router as auth_router
 from src.presentation.api.master_cities import router as master_cities_router
 from src.presentation.api.categories import router as categories_router
 from src.presentation.api.jobs import router as jobs_router
+from src.presentation.api.admin import router as admin_router
 
 app = FastAPI(
     title="Bastion Core API",
@@ -25,6 +26,7 @@ app.include_router(auth_router)
 app.include_router(master_cities_router)
 app.include_router(categories_router)
 app.include_router(jobs_router)
+app.include_router(admin_router)
 
 @app.get("/health")
 def health_check():
