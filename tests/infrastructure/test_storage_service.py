@@ -1,44 +1,46 @@
 import sqlite3
 import pytest
 from unittest.mock import patch
-from src.infrastructure.database.storage_service import StorageService, DB_PATH
+from src.infrastructure.database.storage_service import StorageService
+
+import os
+import tempfile
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    """Limpia las tablas antes y después de cada prueba"""
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM master_cities")
-        cursor.execute("DELETE FROM tenant_categories")
-        conn.commit()
-    yield
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM master_cities")
-        cursor.execute("DELETE FROM tenant_categories")
-        conn.commit()
+    """Limpia las tablas antes y después de cada prueba usando una BD temporal"""
+    fd, temp_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    
+    with patch("src.infrastructure.database.storage_service.DB_PATH", temp_path):
+        from src.infrastructure.database.storage_service import _init_db
+        _init_db()  # Recrea esquemas en el archivo vacío
+        yield
+        
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
 
 class TestStorageServiceTDD:
     def test_get_or_create_city_creates_new_city(self):
         """Si la ciudad no existe, debe crearla y devolver el nuevo ID."""
-        city_id = StorageService.get_or_create_city("Monterrey")
+        city_id = StorageService.get_or_create_city("Nueva_Ciudad")
         assert city_id > 0
         
         # Verificar que se insertó correctamente
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM master_cities WHERE id=?", (city_id,))
             row = cursor.fetchone()
             assert row is not None
-            assert row['name'] == "Monterrey"
+            assert row['name'] == "Nueva_Ciudad"
             assert row['state'] == "N/A"
             assert row['country'] == "N/A"
 
     def test_get_or_create_city_returns_existing(self):
         """Si la ciudad ya existe (sin importar mayúsculas), debe devolver el ID existente y no duplicar."""
         # Insertamos manualmente
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO master_cities (name, state, country) VALUES (?, ?, ?)", ("San Pedro", "NL", "Mexico"))
             conn.commit()
@@ -50,7 +52,7 @@ class TestStorageServiceTDD:
         assert city_id == original_id
         
         # Verificar que no hay duplicados
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM master_cities WHERE name COLLATE NOCASE = ?", ("san pedro",))
             assert cursor.fetchone()[0] == 1
@@ -60,7 +62,7 @@ class TestStorageServiceTDD:
         category_id = StorageService.get_or_create_category("Dentistas", "user_123")
         assert category_id > 0
         
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tenant_categories WHERE id=?", (category_id,))
@@ -109,10 +111,10 @@ class TestStorageServiceTDD:
                 # Insert database state
                 with sqlite3.connect(temp_path) as conn:
                     cursor = conn.cursor()
-                    cursor.execute("INSERT INTO master_cities (id, name, state, country) VALUES (1, 'City', 'State', 'Country')")
-                    cursor.execute("INSERT INTO tenant_categories (id, name, owner_id) VALUES (1, 'Category', 'owner')")
-                    cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (1, 1, 1, 'owner', 'pending')")
-                    cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (2, 1, 1, 'owner', 'pending')")
+                    cursor.execute("INSERT INTO master_cities (id, name, state, country) VALUES (10, 'City', 'State', 'Country')")
+                    cursor.execute("INSERT INTO tenant_categories (id, name, owner_id) VALUES (10, 'Category', 'owner')")
+                    cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (1, 10, 10, 'owner', 'pending')")
+                    cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (2, 10, 10, 'owner', 'pending')")
                     conn.commit()
                 
                 # Call the method
