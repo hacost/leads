@@ -15,34 +15,50 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-
-// Mock Data
-const MOCK_CATEGORIES = [
-  { id: "1", name: "Dentists" },
-  { id: "2", name: "Hardware Stores" },
-  { id: "3", name: "Plumbers" },
-  { id: "4", name: "Spas" },
-]
-
-const MOCK_CITIES = [
-  { id: "1", name: "Monterrey", state: "NL" },
-  { id: "2", name: "Guadalajara", state: "JAL" },
-  { id: "3", name: "Puebla", state: "PUE" },
-  { id: "4", name: "Mexico City", state: "CDMX" },
-  { id: "5", name: "Tijuana", state: "BC" },
-  { id: "6", name: "Cancun", state: "QR" },
-]
+import { useEffect } from "react"
+import api from "@/lib/api"
 
 export default function CreateBatchPage() {
   const router = useRouter()
+  const [categories, setCategories] = useState<any[]>([])
+  const [cities, setCities] = useState<any[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>("")
   const [searchCity, setSearchCity] = useState("")
   const [selectedCities, setSelectedCities] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  const filteredCities = MOCK_CITIES.filter(c => 
-    c.name.toLowerCase().includes(searchCity.toLowerCase()) ||
-    c.state.toLowerCase().includes(searchCity.toLowerCase())
+  const [newCatName, setNewCatName] = useState("")
+  const [isCreatingCat, setIsCreatingCat] = useState(false)
+  
+  const [newCityName, setNewCityName] = useState("")
+  const [newCityState, setNewCityState] = useState("")
+  const [newCityCountry, setNewCityCountry] = useState("Mexico")
+  const [isCreatingCity, setIsCreatingCity] = useState(false)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [catsRes, citiesRes] = await Promise.all([
+          api.get<any[]>('/api/categories'),
+          api.get<any[]>('/api/cities')
+        ])
+        setCategories(catsRes || [])
+        setCities(citiesRes || [])
+      } catch (e: any) {
+        toast.error("Failed to fetch initial data")
+        setCategories([])
+        setCities([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  const filteredCities = cities.filter(c => 
+    (c.name || "").toLowerCase().includes(searchCity.toLowerCase()) ||
+    (c.state || "").toLowerCase().includes(searchCity.toLowerCase())
   )
 
   const handleSelectAll = () => {
@@ -70,20 +86,62 @@ export default function CreateBatchPage() {
 
     setIsSubmitting(true)
     try {
-      // Mock API logic
-      // await api.post("/batch_jobs", { category_id: selectedCategory, city_ids: selectedCities })
+      await Promise.all(
+        selectedCities.map(cityId => 
+          api.post("/api/jobs", {
+            category_id: Number(selectedCategory),
+            city_id: Number(cityId)
+          })
+        )
+      )
       
-      setTimeout(() => {
-        toast.success(`Successfully queued ${selectedCities.length} jobs!`)
-        router.push("/batch/jobs")
-      }, 1000)
+      toast.success(`Successfully queued ${selectedCities.length} jobs!`)
+      router.push("/batch/jobs")
     } catch (error) {
-      toast.error("Failed to create batch")
+      toast.error(error instanceof Error ? error.message : "Failed to create batch")
       setIsSubmitting(false)
     }
   }
 
-  const categoryName = MOCK_CATEGORIES.find(c => c.id === selectedCategory)?.name || "Category"
+  const handleCreateCategory = async () => {
+    if (!newCatName.trim()) return
+    setIsCreatingCat(true)
+    try {
+      const res = await api.post<any>('/api/categories', { name: newCatName.trim() })
+      setCategories([...categories, res])
+      setSelectedCategory(res.id.toString())
+      setNewCatName("")
+      toast.success("Category created and selected")
+    } catch (e: any) {
+      toast.error(e.message || "Failed to create category")
+    } finally {
+      setIsCreatingCat(false)
+    }
+  }
+
+  const handleCreateCity = async () => {
+    if (!newCityName.trim() || !newCityState.trim() || !newCityCountry.trim()) return toast.error("Name, State and Country required")
+    setIsCreatingCity(true)
+    try {
+      const res = await api.post<any>('/api/cities', { 
+        name: newCityName.trim(), 
+        state: newCityState.trim(),
+        country: newCityCountry.trim()
+      })
+      setCities([...cities, res])
+      setSelectedCities([...selectedCities, res.id.toString()])
+      setNewCityName("")
+      setNewCityState("")
+      setNewCityCountry("Mexico")
+      toast.success("City created and selected")
+    } catch (e: any) {
+      toast.error(e.message || "Failed to create city")
+    } finally {
+      setIsCreatingCity(false)
+    }
+  }
+
+  const categoryName = categories.find(c => c.id.toString() === selectedCategory)?.name || "Category"
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -104,13 +162,32 @@ export default function CreateBatchPage() {
                   <SelectValue placeholder="Select a category..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-800 text-white">
-                  {MOCK_CATEGORIES.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id} className="hover:bg-slate-800/50 cursor-pointer">
-                      {cat.name}
-                    </SelectItem>
-                  ))}
+                  {loading ? (
+                    <SelectItem value="loading" disabled>Loading categories...</SelectItem>
+                  ) : (
+                    categories.map(c => (
+                      <SelectItem key={c.id} value={c.id.toString()} className="hover:bg-slate-800/50 cursor-pointer">
+                        {c.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              
+              <div className="mt-6 pt-4 border-t border-slate-800 space-y-3">
+                <Label className="text-slate-400 text-xs uppercase tracking-wider">Or create a new category</Label>
+                <div className="flex space-x-2">
+                  <Input 
+                    placeholder="e.g. Restaurants" 
+                    value={newCatName} 
+                    onChange={e => setNewCatName(e.target.value)}
+                    className="bg-slate-950 border-slate-700 h-9"
+                  />
+                  <Button onClick={handleCreateCategory} disabled={isCreatingCat || !newCatName} size="sm" variant="secondary" className="h-9">
+                    {isCreatingCat ? "..." : "Add"}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -128,14 +205,42 @@ export default function CreateBatchPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <Input
-                placeholder="Search cities..."
+                placeholder="Search existing cities..."
                 value={searchCity}
                 onChange={(e) => setSearchCity(e.target.value)}
-                className="bg-slate-950 border-slate-700 focus-visible:ring-blue-500"
+                className="bg-slate-950 border-slate-700 focus-visible:ring-blue-500 mb-2"
               />
               
+              <div className="flex space-x-2 bg-slate-900 p-3 rounded-md border border-slate-800 mb-4">
+                <Input 
+                  placeholder="New City Name" 
+                  value={newCityName} 
+                  onChange={e => setNewCityName(e.target.value)}
+                  className="bg-slate-950 border-slate-700 h-9 flex-1"
+                />
+                <Input 
+                  placeholder="State (e.g. TX, Guerrero)" 
+                  value={newCityState} 
+                  onChange={e => setNewCityState(e.target.value)}
+                  className="bg-slate-950 border-slate-700 h-9 w-32"
+                />
+                <Input 
+                  placeholder="Country" 
+                  value={newCityCountry} 
+                  onChange={e => setNewCityCountry(e.target.value)}
+                  className="bg-slate-950 border-slate-700 h-9 w-32"
+                />
+                <Button onClick={handleCreateCity} disabled={isCreatingCity || !newCityName || !newCityState || !newCityCountry} size="sm" variant="secondary" className="h-9">
+                  {isCreatingCity ? "..." : "Add"}
+                </Button>
+              </div>
+              
               <div className="h-72 overflow-y-auto border border-slate-800 rounded-md p-4 space-y-3 bg-slate-950/50">
-                {filteredCities.length === 0 ? (
+                    {loading ? (
+                      <div className="flex items-center space-x-3 p-3 text-slate-500 italic">
+                        Loading cities...
+                      </div>
+                    ) : filteredCities.length === 0 ? (
                   <p className="text-center text-slate-500 py-10">No cities match your search.</p>
                 ) : (
                   filteredCities.map(city => (

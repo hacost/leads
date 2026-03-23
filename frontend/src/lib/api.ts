@@ -49,6 +49,10 @@ class ApiClient {
     return this.request<T>(endpoint, { ...options, method: "PUT", data })
   }
 
+  patch<T>(endpoint: string, data: any, options?: Omit<FetchOptions, "method" | "data">) {
+    return this.request<T>(endpoint, { ...options, method: "PATCH", data })
+  }
+
   delete<T>(endpoint: string, options?: Omit<FetchOptions, "method">) {
     return this.request<T>(endpoint, { ...options, method: "DELETE" })
   }

@@ -11,11 +11,11 @@ const navItems = [
   { href: "/batch/create", label: "Create Batch", icon: PlusCircle },
   { href: "/batch/jobs", label: "Jobs Queue", icon: List },
   { href: "/categories", label: "Categories", icon: Folders },
+  { href: "/cities", label: "Cities", icon: MapPin },
 ]
 
 const adminItems = [
   { href: "/admin/control", label: "Master Control", icon: Activity },
-  { href: "/cities", label: "Master Cities", icon: MapPin },
   { href: "/admin/tenants", label: "Tenants", icon: Database },
   { href: "/admin/logs", label: "System Logs", icon: ShieldAlert },
 ]

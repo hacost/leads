@@ -5,22 +5,65 @@ import { Activity, CheckCircle, Clock, AlertTriangle, PlayCircle } from "lucide-
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
+import { useState, useEffect } from "react"
+import api from "@/lib/api"
+import { formatDistanceToNow } from "date-fns"
+
 export default function DashboardPage() {
-  // In a real app, these would come from React Query `useQuery`
-  const stats = {
-    masterSwitch: "ON",
-    pending: 142,
-    running: 3,
-    completed: 890,
-    errors: 12
+  const [jobs, setJobs] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [masterSwitch, setMasterSwitch] = useState(true)
+  const [toggling, setToggling] = useState(false)
+
+  const fetchDashboardData = async () => {
+    try {
+      const [jobsData, workerData] = await Promise.all([
+        api.get<any[]>('/api/jobs'),
+        api.get<{is_enabled: boolean}>('/api/admin/worker')
+      ])
+      setJobs(jobsData || [])
+      if (workerData) setMasterSwitch(workerData.is_enabled)
+      setError(null)
+    } catch (err: any) {
+      setError(err?.message || "Failed to load dashboard data")
+    } finally {
+      if (loading) setLoading(false)
+    }
   }
 
-  const recentJobs = [
-    { id: "1", category: "Dentists", city: "Monterrey", status: "running", created: "10 mins ago" },
-    { id: "2", category: "Hardware Stores", city: "Guadalajara", status: "pending", created: "1 hour ago" },
-    { id: "3", category: "Plumbers", city: "Puebla", status: "completed", created: "3 hours ago" },
-    { id: "4", category: "Spas", city: "Mexico City", status: "failed", created: "5 hours ago" },
-  ]
+  const toggleMasterSwitch = async () => {
+    setToggling(true)
+    try {
+      const resp = await api.patch<{is_enabled: boolean}>('/api/admin/worker', { enabled: !masterSwitch })
+      setMasterSwitch(resp.is_enabled)
+    } catch (err: any) {
+      alert("Failed to toggle Master Switch")
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDashboardData()
+    const interval = setInterval(fetchDashboardData, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const stats = {
+    pending: jobs.filter(j => j.status === 'pending').length,
+    running: jobs.filter(j => j.status === 'processing' || j.status === 'running').length,
+    completed: jobs.filter(j => j.status === 'completed').length,
+    errors: jobs.filter(j => j.status === 'failed').length
+  }
+
+  const recentJobs = [...jobs].sort((a, b) => {
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  }).slice(0, 5)
+
+  if (loading) {
+    return <div className="p-8 text-center text-slate-400">Loading dashboard data...</div>
+  }
 
   return (
     <div className="space-y-6">
@@ -32,11 +75,18 @@ export default function DashboardPage() {
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-400">Master Switch</CardTitle>
-            <Activity className={`h-4 w-4 ${stats.masterSwitch === 'ON' ? 'text-green-500' : 'text-slate-500'}`} />
+            <button 
+              onClick={toggleMasterSwitch} 
+              disabled={toggling}
+              className={`p-1 rounded-full hover:bg-slate-800 transition-colors ${masterSwitch ? 'text-green-500' : 'text-slate-500'}`}
+              title="Toggle Worker ON/OFF"
+            >
+              <Activity className="h-4 w-4" />
+            </button>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${stats.masterSwitch === 'ON' ? 'text-green-500' : 'text-slate-500'}`}>
-              {stats.masterSwitch}
+            <div className={`text-2xl font-bold ${masterSwitch ? 'text-green-500' : 'text-slate-500'}`}>
+              {toggling ? '...' : (masterSwitch ? 'ON' : 'OFF')}
             </div>
             <p className="text-xs text-slate-500 mt-1">Worker execution state</p>
           </CardContent>
@@ -92,6 +142,11 @@ export default function DashboardPage() {
           <CardTitle className="text-white">Recent Activities</CardTitle>
         </CardHeader>
         <CardContent>
+          {error ? (
+            <div className="text-red-400 py-4">{error}</div>
+          ) : recentJobs.length === 0 ? (
+            <div className="text-slate-500 py-4">No jobs found. Create one.</div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow className="border-slate-800 hover:bg-transparent">
@@ -104,23 +159,26 @@ export default function DashboardPage() {
             <TableBody>
               {recentJobs.map((job) => (
                 <TableRow key={job.id} className="border-slate-800 hover:bg-slate-800/50">
-                  <TableCell className="font-medium text-slate-200">{job.category}</TableCell>
-                  <TableCell className="text-slate-300">{job.city}</TableCell>
+                  <TableCell className="font-medium text-slate-200">{job.category_name}</TableCell>
+                  <TableCell className="text-slate-300">{job.city_name}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={
                       job.status === 'completed' ? 'border-green-500 text-green-500' :
-                      job.status === 'running' ? 'border-blue-500 text-blue-500' :
+                      (job.status === 'running' || job.status === 'processing') ? 'border-blue-500 text-blue-500' :
                       job.status === 'pending' ? 'border-yellow-500 text-yellow-500' :
                       'border-red-500 text-red-500'
                     }>
-                      {job.status.toUpperCase()}
+                      {(job.status === 'processing' ? 'running' : job.status).toUpperCase()}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right text-slate-400">{job.created}</TableCell>
+                  <TableCell className="text-right text-slate-400">
+                    {job.created_at ? formatDistanceToNow(new Date(job.created_at + "Z"), { addSuffix: true }) : 'Unknown'}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
     </div>
