@@ -26,7 +26,32 @@ def _init_db():
                 name TEXT NOT NULL,
                 state TEXT NOT NULL,
                 country TEXT NOT NULL,
-                status INTEGER NOT NULL DEFAULT 1
+                status INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Seeder for master_cities
+        cursor.execute("SELECT COUNT(*) FROM master_cities")
+        if cursor.fetchone()[0] == 0:
+            print("   [DB Seeder] Poblando master_cities por defecto...")
+            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Monterrey', 'NL', 'Mexico', 1)")
+            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Guadalajara', 'JAL', 'Mexico', 1)")
+            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Puebla', 'PUE', 'Mexico', 1)")
+            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Mexico City', 'CDMX', 'Mexico', 1)")
+            conn.commit()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bot_sessions (
+                chat_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS worker_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             )
         ''')
         cursor.execute('''
@@ -62,6 +87,10 @@ class StorageService:
     y ninguna otra parte del Agente se rompe.
     """
     
+    @staticmethod
+    def get_db_path() -> str:
+        return DB_PATH
+
     @staticmethod
     def get_session_directory(session_id: str) -> str:
         """Devuelve la ruta estandarizada para guardar o buscar archivos de un usuario."""
@@ -175,7 +204,33 @@ class StorageService:
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
-    def get_or_create_city(name: str) -> int:
+    def create_master_city(name: str, state: str, country: str = "Mexico") -> int:
+        """Crea una nueva ciudad maestra manualmente (dinámico para soportar DB legacy)."""
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            # The table now always has 'country' and 'status'
+            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES (?, ?, ?, 1)", (name, state, country))
+            conn.commit()
+            return cursor.lastrowid
+
+    @staticmethod
+    def update_master_city(city_id: int, name: str, state: str, country: str) -> bool:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE master_cities SET name=?, state=?, country=? WHERE id=?", (name, state, country, city_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def delete_master_city(city_id: int) -> bool:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM master_cities WHERE id=?", (city_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def get_or_create_city(name: str, state: str = "XX") -> int:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             # Búsqueda case as insensitive as possible using COLLATE NOCASE
@@ -207,6 +262,22 @@ class StorageService:
             cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES (?, ?)", (name, owner_id))
             conn.commit()
             return cursor.lastrowid
+
+    @staticmethod
+    def update_category(category_id: int, name: str, owner_id: str) -> bool:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE tenant_categories SET name=? WHERE id=? AND owner_id=?", (name, category_id, owner_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def delete_category(category_id: int, owner_id: str) -> bool:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM tenant_categories WHERE id=? AND owner_id=?", (category_id, owner_id))
+            conn.commit()
+            return cursor.rowcount > 0
 
     @staticmethod
     def get_or_create_category(name: str, owner_id: str) -> int:
@@ -242,6 +313,25 @@ class StorageService:
                 ORDER BY j.created_at DESC
             ''', (owner_id,))
             return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def get_job_by_id(job_id: int, owner_id: str) -> Optional[dict]:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT j.*, 
+                       COALESCE(c.name, 'Unknown') as category_name, 
+                       COALESCE(m.name, 'Unknown') as city_name 
+                FROM batch_jobs j
+                LEFT JOIN tenant_categories c ON j.category_id = c.id
+                LEFT JOIN master_cities m ON j.city_id = m.id
+                WHERE j.id = ? AND j.owner_id = ?
+            ''', (job_id, owner_id))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
 
     @staticmethod
     def create_job(category_id: int, city_id: int, owner_id: str) -> int:
@@ -284,6 +374,28 @@ class StorageService:
             ''', (job_id,))
             full_row = cursor.fetchone()
             return dict(full_row) if full_row else None
+
+    @staticmethod
+    def get_worker_enabled() -> bool:
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM worker_config WHERE key = 'is_enabled'")
+            row = cursor.fetchone()
+            if not row:
+                return True # Default to enabled if not set
+            return row[0].lower() == 'true'
+
+    @staticmethod
+    def set_worker_enabled(enabled: bool):
+        value = 'true' if enabled else 'false'
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO worker_config (key, value) 
+                VALUES ('is_enabled', ?)
+                ON CONFLICT(key) DO UPDATE SET value=?
+            ''', (value, value))
+            conn.commit()
 
     @staticmethod
     def update_job_status(job_id: int, status: str):

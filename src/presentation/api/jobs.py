@@ -15,8 +15,8 @@ class JobCreate(BaseModel):
 
 # We extend the BatchJob model to include the joined names for the UI
 class BatchJobView(BatchJob):
-    category_name: str
-    city_name: str
+    category_name: Optional[str] = "Unknown"
+    city_name: Optional[str] = "Unknown"
 
 @router.get("", response_model=List[BatchJobView])
 async def get_jobs(current_user: dict = Depends(get_current_user)):
@@ -29,6 +29,21 @@ async def get_jobs(current_user: dict = Depends(get_current_user)):
         
     jobs_dict = StorageService.get_jobs(owner_id=owner_id)
     return [BatchJobView(**job) for job in jobs_dict]
+
+@router.get("/{job_id}", response_model=BatchJobView)
+async def get_job(job_id: int, current_user: dict = Depends(get_current_user)):
+    """
+    Returns details for a specific batch job.
+    """
+    owner_id = current_user.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+        
+    job_dict = StorageService.get_job_by_id(job_id=job_id, owner_id=owner_id)
+    if not job_dict:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    return BatchJobView(**job_dict)
 
 @router.post("", response_model=BatchJob)
 async def create_job(job: JobCreate, current_user: dict = Depends(get_current_user)):

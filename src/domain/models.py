@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from enum import Enum
 from datetime import datetime
@@ -15,9 +15,9 @@ class MasterCity(BaseModel):
     state: str
     country: str
     status: int = 1
+    created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TenantCategory(BaseModel):
     id: Optional[int] = None
@@ -25,8 +25,7 @@ class TenantCategory(BaseModel):
     owner_id: str
     status: int = 1
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class BatchJob(BaseModel):
     id: Optional[int] = None
@@ -37,5 +36,4 @@ class BatchJob(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
