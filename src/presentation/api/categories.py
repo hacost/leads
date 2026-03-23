@@ -34,3 +34,20 @@ async def create_category(category: CategoryCreate, current_user: dict = Depends
         
     cat_id = StorageService.create_category(name=category.name, owner_id=owner_id)
     return TenantCategory(id=cat_id, name=category.name, owner_id=owner_id)
+
+@router.put("/{category_id}", response_model=TenantCategory)
+async def update_category(category_id: int, payload: CategoryCreate, current_user: dict = Depends(get_current_user)):
+    owner_id = current_user.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if StorageService.update_category(category_id, payload.name, owner_id):
+        return TenantCategory(id=category_id, name=payload.name, owner_id=owner_id)
+    raise HTTPException(status_code=404, detail="Category not found")
+
+@router.delete("/{category_id}", status_code=204)
+async def delete_category(category_id: int, current_user: dict = Depends(get_current_user)):
+    owner_id = current_user.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not StorageService.delete_category(category_id, owner_id):
+        raise HTTPException(status_code=404, detail="Category not found")
