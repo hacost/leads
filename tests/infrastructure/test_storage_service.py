@@ -138,3 +138,69 @@ class TestStorageServiceTDD:
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+    def test_heartbeat_persistence(self):
+        """Llamar a set_worker_heartbeat() debe persistir el valor en worker_config."""
+        StorageService.set_worker_heartbeat()
+        
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM worker_config WHERE key = 'last_heartbeat'")
+            row = cursor.fetchone()
+            assert row is not None
+            assert len(row[0]) > 0 # Debe tener un timestamp
+
+    def test_get_job_by_id_with_joins(self):
+        """get_job_by_id debe traer los nombres de categoría y ciudad mediante JOINs."""
+        # Setup data
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO master_cities (name, state, country) VALUES ('Veracruz', 'VER', 'Mexico')")
+            city_id = cursor.lastrowid
+            cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES ('Hoteles', 'user_1')")
+            cat_id = cursor.lastrowid
+            cursor.execute("INSERT INTO batch_jobs (category_id, city_id, owner_id, status) VALUES (?, ?, 'user_1', 'pending')", (cat_id, city_id))
+            job_id = cursor.lastrowid
+        
+        job = StorageService.get_job_by_id(job_id, "user_1")
+        assert job is not None
+        assert job['city_name'] == "Veracruz"
+        assert job['category_name'] == "Hoteles"
+
+    def test_get_jobs_with_offset_pagination(self):
+        """get_jobs con offset=1 debe saltarse el primer (más reciente) job."""
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            # Setup mandatory cities and categories for the JOIN to work (letting DB choose IDs)
+            cursor.execute("INSERT INTO master_cities (name, state, country) VALUES ('C1', 'S1', 'MX')")
+            city_id = cursor.lastrowid
+            cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES ('Cat1', 'u1')")
+            cat_id = cursor.lastrowid
+            # Insertar 2 jobs con diferentes timestamps manuales
+            cursor.execute("INSERT INTO batch_jobs (category_id, city_id, owner_id, status, created_at) VALUES (?, ?, 'u1', 'pending', '2026-03-22 10:00:00')", (cat_id, city_id))
+            cursor.execute("INSERT INTO batch_jobs (category_id, city_id, owner_id, status, created_at) VALUES (?, ?, 'u1', 'pending', '2026-03-22 11:00:00')", (cat_id, city_id)) # Más reciente
+            conn.commit()
+            
+            # Recuperamos el ID del primer job insertado para la aserción
+            cursor.execute("SELECT id FROM batch_jobs WHERE created_at = '2026-03-22 10:00:00'")
+            first_job_id = cursor.fetchone()[0]
+        
+        # Con offset=1, el más reciente se ignora, queda el primero
+        jobs = StorageService.get_jobs("u1", limit=1, offset=1)
+        assert len(jobs) == 1
+        assert jobs[0]['id'] == first_job_id
+
+    def test_get_worker_health_logic(self):
+        """get_worker_health debe devolver 'Offline' si el heartbeat es muy antiguo."""
+        # Si no hay heartbeat, es offline
+        health = StorageService.get_worker_health()
+        assert health['status'] == 'offline'
+        
+        # Si hay un heartbeat de hace 1 hora, es offline
+        with sqlite3.connect(StorageService.get_db_path()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO worker_config (key, value) VALUES ('last_heartbeat', '2000-01-01 00:00:00')")
+            conn.commit()
+            
+        health = StorageService.get_worker_health()
+        assert health['status'] == 'offline'

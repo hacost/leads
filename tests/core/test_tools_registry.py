@@ -88,6 +88,22 @@ class TestEjecutarScraperGoogleMaps:
 
             assert mock_create.call_count == 2
 
+    def test_tool_google_maps_fails_on_invalid_city(self):
+        """
+        Si la ciudad no existe en master_cities, la tool debe informar el error
+        y no crear ningún job.
+        """
+        with patch("src.infrastructure.database.storage_service.StorageService.get_city_by_name", return_value=None), \
+             patch("src.infrastructure.database.storage_service.StorageService.create_job") as mock_create:
+            
+            result = ejecutar_scraper_google_maps.invoke(
+                {"zonas": "Ciudad Gótica", "categorias": "Herbolarias"},
+                config=_make_config()
+            )
+            
+            mock_create.assert_not_called()
+            assert "no son zonas operativas permitidas" in result.lower()
+
 
 # =============================================================================
 # GRUPO 2: ejecutar_scraper_facebook → también debe encolar

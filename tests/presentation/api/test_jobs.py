@@ -56,3 +56,26 @@ def test_get_job_by_id_con_id_invalido_retorna_404(mock_storage, auth_client):
     mock_storage.get_job_by_id.return_value = None
     response = auth_client.get("/api/jobs/999", headers={"Authorization": "Bearer fake_token"})
     assert response.status_code == 404
+
+@patch("src.presentation.api.jobs.StorageService")
+def test_retry_job_updates_status_returns_200(mock_storage, auth_client):
+    mock_storage.retry_job.return_value = True
+    response = auth_client.patch("/api/jobs/1/retry", headers={"Authorization": "Bearer fake_token"})
+    assert response.status_code == 200
+    assert response.json()["message"] == "Job rescheduled for processing"
+
+@patch("src.presentation.api.jobs.StorageService")
+def test_get_jobs_with_pagination_params(mock_storage, auth_client):
+    mock_storage.get_jobs.return_value = []
+    response = auth_client.get("/api/jobs?limit=5&offset=10", headers={"Authorization": "Bearer fake_token"})
+    assert response.status_code == 200
+    # Verificamos que se pasaron los parámetros al storage (esto fallará si el endpoint no captura limit/offset)
+    mock_storage.get_jobs.assert_called_with(owner_id="test_chat_123", limit=5, offset=10)
+
+@patch("src.presentation.api.admin.StorageService")
+def test_get_worker_health_endpoint_exists(mock_storage, auth_client):
+    """Prueba que el endpoint para el Badge del dashboard existe."""
+    mock_storage.get_worker_health.return_value = {"status": "online", "last_heartbeat": "2026-03-22 20:00:00"}
+    response = auth_client.get("/api/admin/worker/health", headers={"Authorization": "Bearer fake_token"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "online"
