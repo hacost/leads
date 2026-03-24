@@ -51,19 +51,38 @@ WORKER_PID=$!
 
 # 3. Iniciar la API de FastAPI (Backend)
 echo -e "${YELLOW}[3/4] Iniciando FastAPI Backend en el puerto 8000...${NC}"
-./.venv/bin/uvicorn src.presentation.api.main:app --port 8000 > "logs/[$TS] [API].log" 2>&1 &
+./.venv/bin/uvicorn src.presentation.api.main:app --host 0.0.0.0 --port 8000 > "logs/[$TS] [API].log" 2>&1 &
 API_PID=$!
 
-# 4. Iniciar el Frontend (Next.js Dashboard) con inyección de timestamps
-echo -e "${YELLOW}[4/4] Iniciando Next.js Frontend en el puerto 3000...${NC}"
-(cd frontend && npm run dev 2>&1 | while read -r line; do
+# 4. Iniciar el Frontend (Next.js Dashboard) con Binding Universal (Local + Red)
+echo -e "${YELLOW}[4/4] Iniciando Next.js Frontend...${NC}"
+
+# Detectar IP local en macOS para la presentación profesional
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1)
+
+if [ -z "$LOCAL_IP" ]; then
+    LOCAL_IP="localhost"
+fi
+
+# Binding a 0.0.0.0 garantiza acceso desde localhost Y red simultáneamente
+(cd frontend && npm run dev -- -H 0.0.0.0 2>&1 | while read -r line; do
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] [FRONTEND] $line"
 done > "../logs/[$TS] [FRONTEND].log") &
 FRONTEND_PID=$!
 
-echo -e "\n${GREEN}Todos los servicios (4/4) han sido iniciados correctamente.${NC}"
-echo -e "${BLUE}API URL:${NC}      http://localhost:8000"
-echo -e "${BLUE}Dashboard:${NC}    http://localhost:3000"
+# Esperar un breve momento para que los puertos se abran antes del banner
+sleep 2
+
+echo -e "\n${GREEN}======================================================${NC}"
+echo -e "${GREEN}🚀 BASTION CORE DASHBOARD LISTO PARA DESARROLLO${NC}"
+echo -e "${GREEN}======================================================${NC}"
+echo -e "💻 ${BLUE}Local:${NC}      http://localhost:3000"
+echo -e "🌐 ${BLUE}Red:${NC}        http://$LOCAL_IP:3000"
+echo -e "------------------------------------------------------"
+echo -e "📡 ${BLUE}API Local:${NC}  http://localhost:8000"
+echo -e "📡 ${BLUE}API Red:${NC}    http://$LOCAL_IP:8000"
+echo -e "${GREEN}======================================================${NC}"
+echo -e "${RED}Presiona Ctrl+C para detener TODOS los servicios.${NC}\n"
 echo -e "${RED}Presiona Ctrl+C para detener TODOS los servicios.${NC}\n"
 
 # Función para atrapar Ctrl+C y matar los procesos directos e hijos

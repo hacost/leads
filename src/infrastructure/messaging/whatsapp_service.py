@@ -1,5 +1,8 @@
 import requests
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 # Configuración del servidor WAHA (WhatsApp HTTP API) local
 # Por defecto WAHA corre en el puerto 3000
