@@ -1,6 +1,14 @@
 import { useAuthStore } from "./store"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+  return "http://localhost:8000";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface FetchOptions extends RequestInit {
   data?: any
@@ -31,7 +39,16 @@ class ApiClient {
         useAuthStore.getState().logout()
         window.location.href = "/login"
       }
-      throw new Error(`API error: ${response.status}`)
+      
+      let errorMessage = `API error: ${response.status}`
+      try {
+        const errorData = await response.json()
+        errorMessage = errorData.message || errorData.detail || errorMessage
+      } catch (e) {
+        // Fallback if not JSON
+      }
+      
+      throw new Error(errorMessage)
     }
 
     return response.json()

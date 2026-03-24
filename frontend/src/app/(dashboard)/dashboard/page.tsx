@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [masterSwitch, setMasterSwitch] = useState(true)
   const [workerHealth, setWorkerHealth] = useState({ status: 'offline', last_heartbeat: null })
   const [toggling, setToggling] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   const fetchDashboardData = async () => {
     try {
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    setIsMounted(true)
     fetchDashboardData()
     const interval = setInterval(fetchDashboardData, 30000)
     return () => clearInterval(interval)
@@ -193,7 +195,7 @@ export default function DashboardPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right text-slate-400">
-                    {job.created_at ? formatDistanceToNow(new Date(job.created_at + "Z"), { addSuffix: true }) : 'Unknown'}
+                    {isMounted && job.created_at ? formatDistanceToNow(new Date(job.created_at + "Z"), { addSuffix: true }) : (!isMounted && job.created_at ? '...' : 'Unknown')}
                   </TableCell>
                 </TableRow>
               ))}

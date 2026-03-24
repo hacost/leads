@@ -23,6 +23,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ job_id: st
   const [job, setJob] = useState<JobDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
 
   const fetchJob = async () => {
     try {
@@ -37,6 +38,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ job_id: st
   }
 
   useEffect(() => {
+    setIsMounted(true)
     fetchJob()
     // Poll every 10 seconds if not completed/failed
     const interval = setInterval(() => {
@@ -104,7 +106,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ job_id: st
                 <Clock className="w-4 h-4" /> Started At
               </p>
               <p className="text-base text-slate-200 font-semibold">
-                {job.created_at ? new Date(job.created_at + "Z").toLocaleString() : 'N/A'}
+                {isMounted && job.created_at ? new Date(job.created_at + "Z").toLocaleString() : (!isMounted && job.created_at ? '...' : 'N/A')}
               </p>
             </div>
 
@@ -151,7 +153,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ job_id: st
                 <div className="mb-6 ml-6 relative">
                   <span className="absolute -left-8 top-1 h-4 w-4 rounded-full border-4 border-slate-900 bg-slate-500" />
                   <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-400 font-mono">
-                    {job.created_at ? formatDistanceToNow(new Date(job.created_at + "Z"), { addSuffix: true }) : 'N/A'}
+                    {isMounted && job.created_at ? formatDistanceToNow(new Date(job.created_at + "Z"), { addSuffix: true }) : (!isMounted && job.created_at ? '...' : 'N/A')}
                   </span>
                   <p className="mt-2 text-slate-300">
                     Job requested. Inserted into the Worker Database Queue.

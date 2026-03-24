@@ -17,6 +17,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
+  const [isMounted, setIsMounted] = useState(false)
   
   // Pagination State
   const [page, setPage] = useState(0)
@@ -44,6 +45,7 @@ export default function JobsPage() {
   }
 
   useEffect(() => {
+    setIsMounted(true)
     fetchJobs()
     const interval = setInterval(fetchJobs, 10000)
     return () => clearInterval(interval)
@@ -166,7 +168,7 @@ export default function JobsPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-slate-400 text-sm">
-                    {job.created_at ? formatDistanceToNow(new Date(job.created_at + "Z"), { addSuffix: true }) : 'Unknown'}
+                    {isMounted && job.created_at ? formatDistanceToNow(new Date(job.created_at + "Z"), { addSuffix: true }) : (!isMounted && job.created_at ? '...' : 'Unknown')}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">

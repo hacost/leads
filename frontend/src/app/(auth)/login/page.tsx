@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/lib/store"
+import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,17 +34,8 @@ export default function LoginPage() {
 
     setLoading(true)
     try {
-      const res = await fetch("http://localhost:8000/api/auth/request-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId }),
-      })
+      await api.post("/api/auth/request-otp", { chat_id: chatId })
       
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || "Failed to request OTP")
-      }
-
       setStep(2)
       setTimeLeft(300) // 5 minutes validity 
       toast.success("OTP sent to your Telegram")
@@ -60,18 +52,8 @@ export default function LoginPage() {
 
     setLoading(true)
     try {
-      const res = await fetch("http://localhost:8000/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, code: otp }),
-      })
+      const data = await api.post<any>("/api/auth/verify-otp", { chat_id: chatId, code: otp })
       
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.detail || "Invalid OTP")
-      }
-
-      const data = await res.json()
       // Extract role from token parsing (mock behavior if needed, or proper JWT decode)
       // Usually role is decoded, but for state simplicity we assign 'tenant' or 'admin'
       const role = chatId === '987654321' ? 'admin' : 'tenant'
