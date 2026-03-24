@@ -30,7 +30,7 @@ async def create_master_city(payload: CityCreate, current_user: dict = Depends(g
         raise HTTPException(status_code=401, detail="Invalid token")
     
     if current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Only admins can manage master cities")
+        raise HTTPException(status_code=403, detail="Admin role required to create master cities")
     
     city_id = StorageService.create_master_city(name=payload.name, state=payload.state, country=payload.country)
     return MasterCity(id=city_id, name=payload.name, state=payload.state, country=payload.country)
@@ -38,7 +38,7 @@ async def create_master_city(payload: CityCreate, current_user: dict = Depends(g
 @router.put("/{city_id}", response_model=MasterCity)
 async def update_city(city_id: int, payload: CityCreate, current_user: dict = Depends(get_current_user)):
     if not current_user or current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Only admins can manage master cities")
+        raise HTTPException(status_code=403, detail="Only admins can modify master city catalog")
     if StorageService.update_master_city(city_id, payload.name, payload.state, payload.country):
         return MasterCity(id=city_id, name=payload.name, state=payload.state, country=payload.country)
     raise HTTPException(status_code=404, detail="City not found")

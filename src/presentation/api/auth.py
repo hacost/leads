@@ -6,8 +6,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from telegram import Bot
 
+import logging
 from src.core.config import JWT_SECRET, TELEGRAM_BOT_TOKEN
 from src.core.security import es_usuario_permitido
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 security = HTTPBearer()
@@ -24,14 +27,17 @@ class OTPVerify(BaseModel):
 
 @router.post("/request-otp")
 async def request_otp(data: OTPRequest):
+    # Sanitize chat_id
+    chat_id_clean = data.chat_id.strip()
+    
     # Verify if user is explicitly allowed in Bastion Core
-    if not es_usuario_permitido(int(data.chat_id)):
+    if not es_usuario_permitido(int(chat_id_clean)):
         raise HTTPException(status_code=403, detail="Chat ID not authorized in Bastion Core")
 
     # Generate 4-digit numeric code
     code = f"{random.randint(1000, 9999)}"
     
-    otp_store[data.chat_id] = {
+    otp_store[chat_id_clean] = {
         "code": code,
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5)
     }
@@ -39,9 +45,9 @@ async def request_otp(data: OTPRequest):
     # Dispatch code via Telegram Bot
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     try:
-        logger.info(f"🧪 [DEBUG TEST] OTP Generado para {data.chat_id}: {code}")
+        logger.info(f"🧪 [DEBUG TEST] OTP Generado para [{chat_id_clean}]: {code}")
         await bot.send_message(
-            chat_id=data.chat_id, 
+            chat_id=chat_id_clean, 
             text=f"🔐 Tu código de acceso a Bastion Core Dashboard es: *{code}*\n\nExpirará en 5 minutos.",
             parse_mode="Markdown"
         )
@@ -51,12 +57,13 @@ async def request_otp(data: OTPRequest):
 
 @router.post("/verify-otp")
 async def verify_otp(data: OTPVerify):
-    if data.chat_id not in otp_store:
+    chat_id_clean = data.chat_id.strip()
+    if chat_id_clean not in otp_store:
         raise HTTPException(status_code=400, detail="OTP not requested or expired")
         
-    store_data = otp_store[data.chat_id]
+    store_data = otp_store[chat_id_clean]
     if datetime.now(timezone.utc) > store_data["expires_at"]:
-        del otp_store[data.chat_id]
+        del otp_store[chat_id_clean]
         raise HTTPException(status_code=400, detail="OTP expired")
         
     if store_data["code"] != data.code:
@@ -64,10 +71,10 @@ async def verify_otp(data: OTPVerify):
         
     # Evaluate proper RBAC using the strict security rules
     from src.core.security import es_admin
-    is_admin = es_admin(int(data.chat_id))
+    is_admin = es_admin(int(chat_id_clean))
 
     payload = {
-        "sub": data.chat_id,
+        "sub": chat_id_clean,
         "role": "admin" if is_admin else "tenant",
         "exp": datetime.now(timezone.utc) + timedelta(days=7) # Maintain session for 7 days
     }
