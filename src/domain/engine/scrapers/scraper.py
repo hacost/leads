@@ -1,5 +1,8 @@
 import asyncio
+import logging
 from playwright.async_api import async_playwright
+
+logger = logging.getLogger(__name__)
 import pandas as pd
 import sqlite3
 import os
@@ -209,7 +212,7 @@ class GoogleMapsScraper:
                      return feed ? feed.querySelectorAll("div > div[role='article']").length : 0;
                 }}
             ''', feed_selector)
-            logger.info(f"Loaded {items} items...", end='\r')
+            logger.info(f"Loaded {items} items...")
 
         logger.info(f"\nFinished scrolling. extracting details...")
 

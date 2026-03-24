@@ -1,5 +1,8 @@
 import asyncio
+import logging
 from playwright.async_api import async_playwright
+
+logger = logging.getLogger(__name__)
 import pandas as pd
 import os
 import re
