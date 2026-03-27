@@ -48,7 +48,7 @@ class TestProcesarMensajeAgente:
             _make_ai_message("Hola, ¿en qué te puedo ayudar?"),
         ])
 
-        result = await procesar_mensaje_agente("hola", session_id="user_123")
+        result = await procesar_mensaje_agente("hola", thread_id="user_123")
 
         assert isinstance(result, dict), "Debe retornar un dict"
         assert "respuesta_texto" in result, "Debe tener la key 'respuesta_texto'"
@@ -66,7 +66,7 @@ class TestProcesarMensajeAgente:
             _make_ai_message([{"text": "Hola "}, {"text": "mundo!"}]),
         ])
 
-        result = await procesar_mensaje_agente("hola", session_id="user_123")
+        result = await procesar_mensaje_agente("hola", thread_id="user_123")
 
         assert "Hola" in result["respuesta_texto"]
         assert "mundo" in result["respuesta_texto"]
@@ -80,7 +80,7 @@ class TestProcesarMensajeAgente:
             _make_ai_message("respuesta"),
         ])
 
-        await procesar_mensaje_agente("hola", session_id="sesion_telefono_555")
+        await procesar_mensaje_agente("hola", thread_id="sesion_telefono_555")
 
         # Verificar que invoke fue llamado con el config correcto
         call_kwargs = mock_graph.invoke.call_args
@@ -107,7 +107,7 @@ class TestProcesarMensajeAgente:
         ])
 
         with patch("src.infrastructure.database.storage_service.buscar_excels_de_usuario") as mock_buscar:
-            result = await procesar_mensaje_agente("Busca dentistas", session_id="user_456")
+            result = await procesar_mensaje_agente("Busca dentistas", thread_id="user_456")
 
             # El diseño objetivo NO debe buscar Excels — el worker los enviará
             mock_buscar.assert_not_called()
