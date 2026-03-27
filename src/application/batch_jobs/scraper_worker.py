@@ -22,8 +22,10 @@ async def process_next_job() -> bool:
     
     job_id = job['id']
     owner_id = job['owner_id']
-    city_name = job['city_name']
-    category_name = job['category_name']
+
+    # Dual-path: Bot usa texto libre, Frontend usa FKs con JOIN
+    city_name = job.get('zona_text') or job.get('city_name') or 'Zona desconocida'
+    category_name = job.get('categoria_text') or job.get('category_name') or 'Categoría desconocida'
 
     # 2. Iniciar procesamiento. 
     # El status 'processing' ya fue asignado atómicamente por get_pending_job().

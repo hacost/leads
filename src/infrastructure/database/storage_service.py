@@ -69,8 +69,10 @@ def _init_db():
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS batch_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category_id INTEGER NOT NULL,
-                city_id INTEGER NOT NULL,
+                category_id INTEGER,
+                city_id INTEGER,
+                zona_text TEXT,
+                categoria_text TEXT,
                 owner_id TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -393,6 +395,21 @@ class StorageService:
             )
             conn.commit()
             return cursor.lastrowid
+
+    @staticmethod
+    def create_job_from_text(zona_text: str, categoria_text: str, owner_id: str) -> int:
+        """
+        Crea un job de scraping con zona y categoria en texto libre (sin FK a la DB).
+        Usado exclusivamente por el Bot de Telegram para desacoplar búsquedas del catálogo.
+        """
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO batch_jobs (zona_text, categoria_text, owner_id, status) VALUES (?, ?, ?, 'pending')",
+                (zona_text, categoria_text, owner_id)
+            )
+            conn.commit()
+            return cursor.lastrowid
             
     @staticmethod
     def get_pending_job():
@@ -415,11 +432,17 @@ class StorageService:
                 return None
             
             job_id = row['id']
+            # Dual-path: LEFT JOIN para soportar jobs del Bot (sin FK) y del Frontend (con FK)
             cursor.execute('''
-                SELECT j.*, c.name as category_name, m.name as city_name 
+                SELECT 
+                    j.*,
+                    c.name as category_name,
+                    m.name as city_name,
+                    j.zona_text,
+                    j.categoria_text
                 FROM batch_jobs j
-                JOIN tenant_categories c ON j.category_id = c.id
-                JOIN master_cities m ON j.city_id = m.id
+                LEFT JOIN tenant_categories c ON j.category_id = c.id
+                LEFT JOIN master_cities m ON j.city_id = m.id
                 WHERE j.id=?
             ''', (job_id,))
             full_row = cursor.fetchone()

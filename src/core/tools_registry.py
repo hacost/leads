@@ -28,34 +28,26 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
     lista_cats = [c.strip() for c in categorias.split(";") if c.strip()]
     
     jobs_creados = []
-    zonas_invalidas = []
     
     for cat_name in lista_cats:
         for zona_name in lista_zonas:
-            # Validar contra ciudades maestras (Gaps Auditoría Sprint 2.5)
-            city_data = StorageService.get_city_by_name(zona_name)
-            if not city_data:
-                logger.warning(f"   ⚠️ [Validación] Ciudad '{zona_name}' no encontrada en la DB maestra.")
-                zonas_invalidas.append(zona_name)
-                continue
-                
-            city_id = city_data['id']
-            cat_id = StorageService.get_or_create_category(cat_name, owner_id)
-            
-            # Encolamos el trabajo
-            job_id = StorageService.create_job(cat_id, city_id, owner_id)
+            # El Bot no valida contra la DB — acepta cualquier zona y categoría en texto libre.
+            job_id = StorageService.create_job_from_text(
+                zona_text=zona_name,
+                categoria_text=cat_name,
+                owner_id=owner_id
+            )
             jobs_creados.append(str(job_id))
     
     if not jobs_creados:
-        if zonas_invalidas:
-            return f"❌ Lo siento, las zonas solicitadas ({', '.join(zonas_invalidas)}) no son zonas operativas permitidas actualmente. Por favor, intenta con Monterrey, San Pedro, CDMX o Puebla."
         return "No se pudieron crear los trabajos de búsqueda. Verifica los parámetros."
         
-    respuesta = f"✅ ¡Entendido! He agendado {len(jobs_creados)} búsqueda(s) de extracción (Job IDs: {', '.join(jobs_creados)})."
-    if zonas_invalidas:
-        respuesta += f" (Nota: las zonas '{', '.join(zonas_invalidas)}' fueron ignoradas por no ser zonas operativas permitidas)."
-    
-    return respuesta + " Te enviaré los resultados por este chat en cuanto el proceso termine en segundo plano. ¿Hay algo más en lo que pueda ayudarte mientras tanto?"
+    return (
+        f"✅ ¡Entendido! He agendado {len(jobs_creados)} búsqueda(s) de extracción "
+        f"(Job IDs: {', '.join(jobs_creados)}). "
+        "Te enviaré los resultados por este chat en cuanto el proceso termine en segundo plano. "
+        "¿Hay algo más en lo que pueda ayudarte mientras tanto?"
+    )
 
 @tool
 def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfig) -> str:
@@ -74,9 +66,12 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfi
     jobs_creados = []
     for cat_name in lista_cats:
         for zona_name in lista_zonas:
-            city_id = StorageService.get_or_create_city(zona_name)
-            cat_id = StorageService.get_or_create_category(cat_name, owner_id)
-            job_id = StorageService.create_job(cat_id, city_id, owner_id)
+            # El Bot no valida contra la DB — acepta cualquier zona y categoría en texto libre.
+            job_id = StorageService.create_job_from_text(
+                zona_text=zona_name,
+                categoria_text=cat_name,
+                owner_id=owner_id
+            )
             jobs_creados.append(str(job_id))
             
     return f"✅ He encolado {len(jobs_creados)} búsqueda(s) en Facebook. Recibirás los archivos aquí automáticamente."
