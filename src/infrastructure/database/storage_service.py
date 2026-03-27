@@ -81,6 +81,12 @@ def _init_db():
                 FOREIGN KEY (category_id) REFERENCES tenant_categories(id)
             )
         ''')
+        # Migration: add zona_text and categoria_text to existing DBs that predate this schema
+        for col in ("zona_text", "categoria_text"):
+            try:
+                cursor.execute(f"ALTER TABLE batch_jobs ADD COLUMN {col} TEXT")
+            except Exception:
+                pass  # Column already exists — safe to ignore
         conn.commit()
 
 _init_db()

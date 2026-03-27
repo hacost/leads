@@ -33,53 +33,37 @@ def _make_config(thread_id: str = "test_user_123") -> dict:
 # =============================================================================
 
 class TestEjecutarScraperGoogleMaps:
-    """
-    ROJO: El código actual usa subprocess.run. Estos tests verifican que DESPUÉS
-    de la refactorización, la tool llame a StorageService.create_job en vez de subprocess.
-    """
+    """Verifica el comportamiento del Bot Google Maps con el nuevo flujo desacoplado."""
 
     def test_encola_job_y_NO_llama_subprocess(self):
-        """
-        La tool DEBE usar StorageService, NO subprocess.run.
-        ROJO: falla porque el código actual sí llama subprocess.
-        """
+        """La tool usa create_job_from_text, NO subprocess.run."""
         with patch("subprocess.run") as mock_subprocess, \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_city", return_value=10), \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_category", return_value=20), \
-             patch("src.infrastructure.database.storage_service.StorageService.create_job", return_value=99):
+             patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=99) as mock_create:
 
             result = ejecutar_scraper_google_maps.invoke(
                 {"zonas": "Monterrey", "categorias": "Dentistas"},
                 config=_make_config("owner_456")
             )
 
-            # subprocess.run NO debe ser llamado en el nuevo diseño
             mock_subprocess.assert_not_called()
-            # El mensaje debe confirmar el encolamiento
+            mock_create.assert_called_once()
             assert "99" in result or "encolad" in result.lower() or "agendad" in result.lower()
 
     def test_usa_thread_id_como_owner_id(self):
-        """El owner_id pasado a create_job debe ser el thread_id del config de LangGraph."""
-        with patch("subprocess.run"), \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_city", return_value=1), \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_category", return_value=2), \
-             patch("src.infrastructure.database.storage_service.StorageService.create_job", return_value=5) as mock_create:
+        """El owner_id pasado a create_job_from_text debe ser el thread_id del config de LangGraph."""
+        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=5) as mock_create:
 
             ejecutar_scraper_google_maps.invoke(
                 {"zonas": "Guadalajara", "categorias": "Plomeros"},
                 config=_make_config("chat_id_789")
             )
 
-            # El tercer argumento de create_job debe ser el thread_id
-            args = mock_create.call_args[0]
-            assert args[2] == "chat_id_789"
+            kwargs = mock_create.call_args[1]
+            assert kwargs["owner_id"] == "chat_id_789"
 
     def test_maneja_multiples_zonas_separadas_por_punto_y_coma(self):
         """Si el LLM pasa 'Monterrey; Guadalajara', debe crear un job por cada zona."""
-        with patch("subprocess.run"), \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_city", return_value=1), \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_category", return_value=2), \
-             patch("src.infrastructure.database.storage_service.StorageService.create_job", return_value=1) as mock_create:
+        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1) as mock_create:
 
             ejecutar_scraper_google_maps.invoke(
                 {"zonas": "Monterrey; Guadalajara", "categorias": "Dentistas"},
@@ -88,21 +72,20 @@ class TestEjecutarScraperGoogleMaps:
 
             assert mock_create.call_count == 2
 
-    def test_tool_google_maps_fails_on_invalid_city(self):
+    def test_bot_acepta_zona_no_registrada_en_db(self):
         """
-        Si la ciudad no existe en master_cities, la tool debe informar el error
-        y no crear ningún job.
+        El Bot NO valida zonas contra la DB — acepta cualquier texto libre.
+        "Ciudad Gótica" debe encolarse igual que cualquier otra zona.
         """
-        with patch("src.infrastructure.database.storage_service.StorageService.get_city_by_name", return_value=None), \
-             patch("src.infrastructure.database.storage_service.StorageService.create_job") as mock_create:
-            
+        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=10) as mock_create:
             result = ejecutar_scraper_google_maps.invoke(
                 {"zonas": "Ciudad Gótica", "categorias": "Herbolarias"},
                 config=_make_config()
             )
-            
-            mock_create.assert_not_called()
-            assert "no son zonas operativas permitidas" in result.lower()
+
+        mock_create.assert_called_once()
+        assert "10" in result or "agenda" in result.lower()
+
 
 
 # =============================================================================
@@ -112,11 +95,9 @@ class TestEjecutarScraperGoogleMaps:
 class TestEjecutarScraperFacebook:
 
     def test_encola_job_y_NO_llama_subprocess(self):
-        """La tool de Facebook también debe encolar en batch_jobs, no usar subprocess."""
+        """La tool de Facebook usa create_job_from_text, no subprocess."""
         with patch("subprocess.run") as mock_subprocess, \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_city", return_value=5), \
-             patch("src.infrastructure.database.storage_service.StorageService.get_or_create_category", return_value=6), \
-             patch("src.infrastructure.database.storage_service.StorageService.create_job", return_value=88) as mock_create:
+             patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=88) as mock_create:
 
             result = ejecutar_scraper_facebook.invoke(
                 {"zonas": "Tijuana", "categorias": "Ferreterías"},

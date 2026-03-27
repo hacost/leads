@@ -89,10 +89,13 @@ class TestStorageServiceTDD:
     @patch("os.path.exists")
     @patch("shutil.rmtree")
     def test_eliminar_sesion_no_tiene_print_duplicado(self, mock_rmtree, mock_exists, mock_print):
-        """Verifica que eliminar_sesion() no genere output duplicado."""
+        """Verifica que eliminar_sesion() no genere print() y que solo llame rmtree una vez."""
         mock_exists.return_value = True
         StorageService.eliminar_sesion("test_session_123")
-        assert mock_print.call_count == 1, "El print se llamó múltiples veces de manera duplicada."
+        # El código usa logger.info, nunca print() directamente
+        mock_print.assert_not_called()
+        # El rmtree debe llamarse exactamente una vez (sin duplicados)
+        mock_rmtree.assert_called_once()
 
     def test_get_pending_job_es_atomico(self):
         """Verifica que get_pending_job() obtiene y actualiza el estado en una sola operación atómica."""
