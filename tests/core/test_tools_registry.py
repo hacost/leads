@@ -194,3 +194,69 @@ class TestGestionarRecordatorio:
 
             mock_eliminar.assert_not_called()
             assert "error" in result.lower() or "Error" in result
+
+
+# =============================================================================
+# SPRINT 1 — FASE 1: Desacoplamiento Total del Bot de la DB
+# (Estos tests DEBEN FALLAR en ROJO hasta que se implemente FASE 2)
+# =============================================================================
+
+class TestBotDecouplingFromDB:
+    """
+    Sprint 1 - FASE 1: Verifica que el Bot NO persiste nada en la DB.
+    El Bot debe usar create_job_from_text con texto libre (zona + categoria).
+
+    ESTADO ESPERADO: ROJO — el código actual todavía llama a get_city_by_name,
+    get_or_create_category y get_or_create_city.
+    """
+
+    def test_google_maps_bot_does_not_validate_city_in_db(self):
+        """Test S1-1.1: El bot NO debe llamar a get_city_by_name."""
+        with patch("src.core.tools_registry.StorageService.get_city_by_name") as mock_validate:
+            with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1):
+                ejecutar_scraper_google_maps.invoke({
+                    "zonas": "Berlin",
+                    "categorias": "Dentistas",
+                    "config": _make_config("owner_1")
+                })
+        mock_validate.assert_not_called()
+
+    def test_google_maps_bot_does_not_create_category_in_db(self):
+        """Test S1-1.2: El bot NO debe llamar a get_or_create_category."""
+        with patch("src.core.tools_registry.StorageService.get_or_create_category") as mock_cat:
+            with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1):
+                ejecutar_scraper_google_maps.invoke({
+                    "zonas": "Berlin",
+                    "categorias": "Dentistas",
+                    "config": _make_config("owner_1")
+                })
+        mock_cat.assert_not_called()
+
+    def test_google_maps_bot_passes_free_text_to_create_job(self):
+        """Test S1-1.3: El bot llama a create_job_from_text con zona y categoria en texto libre."""
+        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=42) as mock_create:
+            result = ejecutar_scraper_google_maps.invoke(
+                {"zonas": "Paris", "categorias": "Abogados"},
+                config=_make_config("owner_1")
+            )
+
+        mock_create.assert_called_once()
+        kwargs = mock_create.call_args[1]
+        assert kwargs["zona_text"] == "Paris"
+        assert kwargs["categoria_text"] == "Abogados"
+        assert kwargs["owner_id"] == "owner_1"
+        assert "42" in result
+
+
+    def test_facebook_bot_does_not_create_city_or_category_in_db(self):
+        """Test S1-1.4: El bot de Facebook NO crea ciudad ni categoría en DB."""
+        with patch("src.core.tools_registry.StorageService.get_or_create_city") as mock_city:
+            with patch("src.core.tools_registry.StorageService.get_or_create_category") as mock_cat:
+                with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1):
+                    ejecutar_scraper_facebook.invoke({
+                        "zonas": "Madrid",
+                        "categorias": "Plomeros",
+                        "config": _make_config("owner_1")
+                    })
+        mock_city.assert_not_called()
+        mock_cat.assert_not_called()

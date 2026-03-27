@@ -123,3 +123,82 @@ class TestScraperWorker:
         # en inyectar el JOB_DELAY_SECONDS de la env en lugar de '2'.
         mock_sleep.assert_any_call(45)
 
+
+# =============================================================================
+# SPRINT 1 — FASE 1: Worker Dual-Path (Bot free-text vs Frontend FK)
+# (Estos tests DEBEN FALLAR en ROJO hasta que se implemente FASE 2)
+# =============================================================================
+
+@pytest.mark.asyncio
+class TestWorkerDualPath:
+    """
+    Sprint 1 - FASE 1: El Worker debe manejar dos tipos de jobs:
+    - Job de Bot: city_id=None, zona_text="Paris", category_id=None, categoria_text="Dentistas"
+    - Job de Frontend: city_id=5, city_name="Monterrey", category_id=3, category_name="Dentistas"
+
+    ESTADO ESPERADO: ROJO — el código actual no tiene zona_text ni categoria_text.
+    """
+
+    @patch("src.application.batch_jobs.scraper_worker.StorageService")
+    @patch("src.application.batch_jobs.scraper_worker.GoogleMapsScraper")
+    @patch("src.application.batch_jobs.scraper_worker.Bot")
+    async def test_worker_uses_zona_text_when_city_id_is_none(
+        self, mock_bot_class, mock_scraper_class, mock_storage
+    ):
+        """Test S1-1.5: Worker usa zona_text y categoria_text si city_id/category_id son None (job de Bot)."""
+        mock_storage.get_pending_job.return_value = {
+            "id": 1,
+            "city_id": None,
+            "zona_text": "Tokio",
+            "category_id": None,
+            "categoria_text": "Medicos",
+            "owner_id": "owner_1",
+        }
+        mock_storage.fetch_excel_files_for_session.return_value = []
+
+        mock_bot_inst = MagicMock()
+        mock_bot_inst.send_message = AsyncMock()
+        mock_bot_class.return_value = mock_bot_inst
+
+        mock_scraper_inst = MagicMock()
+        mock_scraper_inst.scrape = AsyncMock()
+        mock_scraper_class.return_value = mock_scraper_inst
+
+        await process_next_job()
+
+        # El scraper debe recibir las zonas y categorias en texto libre
+        mock_scraper_inst.scrape.assert_called_once_with(["Tokio"], ["Medicos"])
+
+    @patch("src.application.batch_jobs.scraper_worker.StorageService")
+    @patch("src.application.batch_jobs.scraper_worker.GoogleMapsScraper")
+    @patch("src.application.batch_jobs.scraper_worker.Bot")
+    async def test_worker_uses_city_and_category_name_when_job_comes_from_frontend(
+        self, mock_bot_class, mock_scraper_class, mock_storage
+    ):
+        """Test S1-1.6: Worker usa city_name y category_name (JOIN) cuando job viene del Frontend."""
+        mock_storage.get_pending_job.return_value = {
+            "id": 2,
+            "city_id": 5,
+            "zona_text": None,
+            "category_id": 3,
+            "categoria_text": None,
+            "city_name": "Monterrey",
+            "category_name": "Dentistas",
+            "owner_id": "owner_1",
+        }
+        mock_storage.fetch_excel_files_for_session.return_value = []
+
+        mock_bot_inst = MagicMock()
+        mock_bot_inst.send_message = AsyncMock()
+        mock_bot_class.return_value = mock_bot_inst
+
+        mock_scraper_inst = MagicMock()
+        mock_scraper_inst.scrape = AsyncMock()
+        mock_scraper_class.return_value = mock_scraper_inst
+
+        await process_next_job()
+
+        # El scraper debe recibir los nombres del JOIN, no el ID
+        mock_scraper_inst.scrape.assert_called_once_with(["Monterrey"], ["Dentistas"])
+
+
