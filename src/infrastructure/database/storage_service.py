@@ -59,10 +59,9 @@ def _init_db():
             )
         ''')
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tenant_categories (
+            CREATE TABLE IF NOT EXISTS master_categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                owner_id TEXT NOT NULL,
                 status INTEGER NOT NULL DEFAULT 1
             )
         ''')
@@ -78,15 +77,19 @@ def _init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (city_id) REFERENCES master_cities(id),
-                FOREIGN KEY (category_id) REFERENCES tenant_categories(id)
+                FOREIGN KEY (category_id) REFERENCES master_categories(id)
             )
         ''')
-        # Migration: add zona_text and categoria_text to existing DBs that predate this schema
+        # Migration 1: add zona_text and categoria_text to existing DBs that predate this schema
         for col in ("zona_text", "categoria_text"):
             try:
                 cursor.execute(f"ALTER TABLE batch_jobs ADD COLUMN {col} TEXT")
             except Exception:
                 pass  # Column already exists — safe to ignore
+
+        # 2. Eliminar la tabla obsoleta
+        cursor.execute("DROP TABLE IF EXISTS tenant_categories")
+
         conn.commit()
 
 _init_db()
@@ -270,56 +273,51 @@ class StorageService:
             return dict(row) if row else None
 
     @staticmethod
-    def get_categories(owner_id: str, limit: int = 100, offset: int = 0):
+    def get_categories():
+        """Retorna TODAS las categorías maestras globales. (Eliminamos parám owner_id por ser global)."""
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM tenant_categories WHERE owner_id=? AND status=1 LIMIT ? OFFSET ?", (owner_id, limit, offset))
+            cursor.execute("SELECT * FROM master_categories WHERE status=1 ORDER BY name ASC")
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
-    def create_category(name: str, owner_id: str) -> int:
+    def create_category(name: str) -> int:
+        """Crea una categoría maestra global."""
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES (?, ?)", (name, owner_id))
+            cursor.execute(
+                "INSERT INTO master_categories (name) VALUES (?)",
+                (name,)
+            )
             conn.commit()
             return cursor.lastrowid
 
     @staticmethod
-    def update_category(category_id: int, name: str, owner_id: str) -> bool:
-        with sqlite3.connect(StorageService.get_db_path()) as conn:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE tenant_categories SET name=? WHERE id=? AND owner_id=?", (name, category_id, owner_id))
-            conn.commit()
-            return cursor.rowcount > 0
-
-    @staticmethod
-    def delete_category(category_id: int, owner_id: str) -> bool:
-        with sqlite3.connect(StorageService.get_db_path()) as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM tenant_categories WHERE id=? AND owner_id=?", (category_id, owner_id))
-            conn.commit()
-            return cursor.rowcount > 0
-
-    @staticmethod
-    def get_or_create_category(name: str, owner_id: str) -> int:
+    def update_category_status(category_id: int, new_status: int) -> bool:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id FROM tenant_categories WHERE name COLLATE NOCASE = ? AND owner_id = ?",
-                (name, owner_id)
-            )
+            cursor.execute("UPDATE master_categories SET status=? WHERE id=?", (new_status, category_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def delete_category(category_id: int) -> bool:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM master_categories WHERE id=?", (category_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def get_category_by_name(name: str) -> Optional[dict]:
+        """Busca una categoría global por nombre exacto (case-insensitive) para validación del Bot."""
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM master_categories WHERE name COLLATE NOCASE = ?", (name,))
             row = cursor.fetchone()
-            if row:
-                return row[0]
-                
-            # Si no existe para este usuario, la creamos
-            cursor.execute(
-                "INSERT INTO tenant_categories (name, owner_id) VALUES (?, ?)",
-                (name, owner_id)
-            )
-            conn.commit()
-            return cursor.lastrowid
+            return dict(row) if row else None
 
     @staticmethod
     def get_jobs(owner_id: str, limit: int = 50, offset: int = 0):
@@ -330,8 +328,8 @@ class StorageService:
             cursor.execute(f'''
                 SELECT j.*, c.name as category_name, m.name as city_name 
                 FROM batch_jobs j
-                JOIN tenant_categories c ON j.category_id = c.id
-                JOIN master_cities m ON j.city_id = m.id
+                LEFT JOIN master_categories c ON j.category_id = c.id
+                LEFT JOIN master_cities m ON j.city_id = m.id
                 WHERE j.owner_id=?
                 ORDER BY j.created_at DESC
                 LIMIT ? OFFSET ?
@@ -348,7 +346,7 @@ class StorageService:
                        COALESCE(c.name, 'Unknown') as category_name, 
                        COALESCE(m.name, 'Unknown') as city_name 
                 FROM batch_jobs j
-                LEFT JOIN tenant_categories c ON j.category_id = c.id
+                LEFT JOIN master_categories c ON j.category_id = c.id
                 LEFT JOIN master_cities m ON j.city_id = m.id
                 WHERE j.id = ? AND j.owner_id = ?
             ''', (job_id, owner_id))
@@ -392,27 +390,20 @@ class StorageService:
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
-    def create_job(category_id: int, city_id: int, owner_id: str) -> int:
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO batch_jobs (category_id, city_id, owner_id, status) VALUES (?, ?, ?, 'pending')",
-                (category_id, city_id, owner_id)
-            )
-            conn.commit()
-            return cursor.lastrowid
-
-    @staticmethod
-    def create_job_from_text(zona_text: str, categoria_text: str, owner_id: str) -> int:
+    def create_hybrid_job(owner_id: str, category_id: int = None, categoria_text: str = None, city_id: int = None, zona_text: str = None) -> int:
         """
-        Crea un job de scraping con zona y categoria en texto libre (sin FK a la DB).
-        Usado exclusivamente por el Bot de Telegram para desacoplar búsquedas del catálogo.
+        Punto de entrada unificado para crear Jobs. 
+        Soporta tanto Jobs 100% relacionales (Frontend) como Jobs híbridos/texto-libre (Bot).
         """
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO batch_jobs (zona_text, categoria_text, owner_id, status) VALUES (?, ?, ?, 'pending')",
-                (zona_text, categoria_text, owner_id)
+                """
+                INSERT INTO batch_jobs 
+                (category_id, categoria_text, city_id, zona_text, owner_id, status) 
+                VALUES (?, ?, ?, ?, ?, 'pending')
+                """,
+                (category_id, categoria_text, city_id, zona_text, owner_id)
             )
             conn.commit()
             return cursor.lastrowid
@@ -447,7 +438,7 @@ class StorageService:
                     j.zona_text,
                     j.categoria_text
                 FROM batch_jobs j
-                LEFT JOIN tenant_categories c ON j.category_id = c.id
+                LEFT JOIN master_categories c ON j.category_id = c.id
                 LEFT JOIN master_cities m ON j.city_id = m.id
                 WHERE j.id=?
             ''', (job_id,))
