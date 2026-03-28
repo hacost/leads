@@ -19,10 +19,9 @@ class MasterCity(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class TenantCategory(BaseModel):
+class MasterCategory(BaseModel):
     id: Optional[int] = None
     name: str
-    owner_id: str
     status: int = 1
 
     model_config = ConfigDict(from_attributes=True)
