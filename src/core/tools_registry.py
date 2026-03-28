@@ -31,11 +31,22 @@ def ejecutar_scraper_google_maps(zonas: str, categorias: str, config: RunnableCo
     
     for cat_name in lista_cats:
         for zona_name in lista_zonas:
-            # El Bot no valida contra la DB — acepta cualquier zona y categoría en texto libre.
-            job_id = StorageService.create_job_from_text(
-                zona_text=zona_name,
-                categoria_text=cat_name,
-                owner_id=owner_id
+            # 1. Category Hybrid Match (busca en master_categories, no crea jamás)
+            cat_data = StorageService.get_category_by_name(cat_name)
+            cat_id = cat_data['id'] if cat_data else None
+            cat_text = None if cat_data else cat_name
+            
+            # 2. City Hybrid Match (busca en master_cities, no crea jamás)
+            city_data = StorageService.get_city_by_name(zona_name)
+            city_id = city_data['id'] if city_data else None
+            city_text = None if city_data else zona_name
+            
+            job_id = StorageService.create_hybrid_job(
+                owner_id=owner_id, 
+                category_id=cat_id, 
+                categoria_text=cat_text,
+                city_id=city_id,
+                zona_text=city_text
             )
             jobs_creados.append(str(job_id))
     
@@ -66,11 +77,22 @@ def ejecutar_scraper_facebook(zonas: str, categorias: str, config: RunnableConfi
     jobs_creados = []
     for cat_name in lista_cats:
         for zona_name in lista_zonas:
-            # El Bot no valida contra la DB — acepta cualquier zona y categoría en texto libre.
-            job_id = StorageService.create_job_from_text(
-                zona_text=zona_name,
-                categoria_text=cat_name,
-                owner_id=owner_id
+            # 1. Category Hybrid Match
+            cat_data = StorageService.get_category_by_name(cat_name)
+            cat_id = cat_data['id'] if cat_data else None
+            cat_text = None if cat_data else cat_name
+            
+            # 2. City Hybrid Match
+            city_data = StorageService.get_city_by_name(zona_name)
+            city_id = city_data['id'] if city_data else None
+            city_text = None if city_data else zona_name
+            
+            job_id = StorageService.create_hybrid_job(
+                owner_id=owner_id, 
+                category_id=cat_id, 
+                categoria_text=cat_text,
+                city_id=city_id,
+                zona_text=city_text
             )
             jobs_creados.append(str(job_id))
             
