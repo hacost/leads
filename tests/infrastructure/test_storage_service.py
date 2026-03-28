@@ -57,33 +57,18 @@ class TestStorageServiceTDD:
             cursor.execute("SELECT COUNT(*) FROM master_cities WHERE name COLLATE NOCASE = ?", ("san pedro",))
             assert cursor.fetchone()[0] == 1
 
-    def test_get_or_create_category_creates_new(self):
-        """Si la categoría no existe para el usuario, debe crearla."""
-        category_id = StorageService.get_or_create_category("Dentistas", "user_123")
+    def test_get_category_by_name_works(self):
+        """Verifica que get_category_by_name devuelva la categoría maestra o None."""
+        category_id = StorageService.create_category("Dentistas")
         assert category_id > 0
         
-        with sqlite3.connect(StorageService.get_db_path()) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM tenant_categories WHERE id=?", (category_id,))
-            row = cursor.fetchone()
-            assert row is not None
-            assert row['name'] == "Dentistas"
-            assert row['owner_id'] == "user_123"
-
-    def test_get_or_create_category_returns_existing(self):
-        """Si la categoría ya existe para un usuario, devuelve su ID sin duplicar."""
-        # Creamos una original
-        original_id = StorageService.create_category("Plomeros", "user_456")
+        cat = StorageService.get_category_by_name("Dentistas")
+        assert cat is not None
+        assert cat['name'] == "Dentistas"
         
-        # Intentamos recrear
-        new_id = StorageService.get_or_create_category("plomeros", "user_456")
-        
-        assert new_id == original_id
-        
-        # Verificar que si es de otro owner, SI crea una nueva
-        other_owner_id = StorageService.get_or_create_category("plomeros", "user_999")
-        assert other_owner_id != original_id
+        # Test missing
+        missing = StorageService.get_category_by_name("Arquitectos")
+        assert missing is None
 
     @patch("builtins.print")
     @patch("os.path.exists")
@@ -115,7 +100,7 @@ class TestStorageServiceTDD:
                 with sqlite3.connect(temp_path) as conn:
                     cursor = conn.cursor()
                     cursor.execute("INSERT INTO master_cities (id, name, state, country) VALUES (10, 'City', 'State', 'Country')")
-                    cursor.execute("INSERT INTO tenant_categories (id, name, owner_id) VALUES (10, 'Category', 'owner')")
+                    cursor.execute("INSERT INTO master_categories (id, name) VALUES (10, 'Category')")
                     cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (1, 10, 10, 'owner', 'pending')")
                     cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (2, 10, 10, 'owner', 'pending')")
                     conn.commit()
@@ -160,7 +145,7 @@ class TestStorageServiceTDD:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO master_cities (name, state, country) VALUES ('Veracruz', 'VER', 'Mexico')")
             city_id = cursor.lastrowid
-            cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES ('Hoteles', 'user_1')")
+            cursor.execute("INSERT INTO master_categories (name) VALUES ('Hoteles')")
             cat_id = cursor.lastrowid
             cursor.execute("INSERT INTO batch_jobs (category_id, city_id, owner_id, status) VALUES (?, ?, 'user_1', 'pending')", (cat_id, city_id))
             job_id = cursor.lastrowid
@@ -177,7 +162,7 @@ class TestStorageServiceTDD:
             # Setup mandatory cities and categories for the JOIN to work (letting DB choose IDs)
             cursor.execute("INSERT INTO master_cities (name, state, country) VALUES ('C1', 'S1', 'MX')")
             city_id = cursor.lastrowid
-            cursor.execute("INSERT INTO tenant_categories (name, owner_id) VALUES ('Cat1', 'u1')")
+            cursor.execute("INSERT INTO master_categories (name) VALUES ('Cat1')")
             cat_id = cursor.lastrowid
             # Insertar 2 jobs con diferentes timestamps manuales
             cursor.execute("INSERT INTO batch_jobs (category_id, city_id, owner_id, status, created_at) VALUES (?, ?, 'u1', 'pending', '2026-03-22 10:00:00')", (cat_id, city_id))

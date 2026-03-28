@@ -23,7 +23,7 @@ def test_get_categories_with_dynamic_pagination(auth_client):
         for limit in [10, 20, 30, 50, 100]:
             response = auth_client.get(f"/api/categories?limit={limit}&offset=0")
             assert response.status_code == 200
-            mock_get.assert_called_with(owner_id="test_user", limit=limit, offset=0)
+            mock_get.assert_called_with()
 
 def test_get_cities_with_dynamic_pagination(auth_client):
     """Verifica que el endpoint de ciudades acepte limit dinámico (10, 20, 50, 100)."""

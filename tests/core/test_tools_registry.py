@@ -32,38 +32,14 @@ def _make_config(thread_id: str = "test_user_123") -> dict:
 # GRUPO 1: ejecutar_scraper_google_maps → DEBE encolar en batch_jobs
 # =============================================================================
 
-class TestEjecutarScraperGoogleMaps:
-    """Verifica el comportamiento del Bot Google Maps con el nuevo flujo desacoplado."""
-
-    def test_encola_job_y_NO_llama_subprocess(self):
-        """La tool usa create_job_from_text, NO subprocess.run."""
-        with patch("subprocess.run") as mock_subprocess, \
-             patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=99) as mock_create:
-
-            result = ejecutar_scraper_google_maps.invoke(
-                {"zonas": "Monterrey", "categorias": "Dentistas"},
-                config=_make_config("owner_456")
-            )
-
-            mock_subprocess.assert_not_called()
-            mock_create.assert_called_once()
-            assert "99" in result or "encolad" in result.lower() or "agendad" in result.lower()
-
-    def test_usa_thread_id_como_owner_id(self):
-        """El owner_id pasado a create_job_from_text debe ser el thread_id del config de LangGraph."""
-        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=5) as mock_create:
-
-            ejecutar_scraper_google_maps.invoke(
-                {"zonas": "Guadalajara", "categorias": "Plomeros"},
-                config=_make_config("chat_id_789")
-            )
-
-            kwargs = mock_create.call_args[1]
-            assert kwargs["owner_id"] == "chat_id_789"
+class TestToolsEdgeCases:
+    """Verifica casos borde y funcionalidades extra de los scrapers."""
 
     def test_maneja_multiples_zonas_separadas_por_punto_y_coma(self):
         """Si el LLM pasa 'Monterrey; Guadalajara', debe crear un job por cada zona."""
-        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1) as mock_create:
+        with patch("src.core.tools_registry.StorageService.get_category_by_name", return_value={"id": 99}), \
+             patch("src.core.tools_registry.StorageService.get_city_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", return_value=1) as mock_create:
 
             ejecutar_scraper_google_maps.invoke(
                 {"zonas": "Monterrey; Guadalajara", "categorias": "Dentistas"},
@@ -72,41 +48,6 @@ class TestEjecutarScraperGoogleMaps:
 
             assert mock_create.call_count == 2
 
-    def test_bot_acepta_zona_no_registrada_en_db(self):
-        """
-        El Bot NO valida zonas contra la DB — acepta cualquier texto libre.
-        "Ciudad Gótica" debe encolarse igual que cualquier otra zona.
-        """
-        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=10) as mock_create:
-            result = ejecutar_scraper_google_maps.invoke(
-                {"zonas": "Ciudad Gótica", "categorias": "Herbolarias"},
-                config=_make_config()
-            )
-
-        mock_create.assert_called_once()
-        assert "10" in result or "agenda" in result.lower()
-
-
-
-# =============================================================================
-# GRUPO 2: ejecutar_scraper_facebook → también debe encolar
-# =============================================================================
-
-class TestEjecutarScraperFacebook:
-
-    def test_encola_job_y_NO_llama_subprocess(self):
-        """La tool de Facebook usa create_job_from_text, no subprocess."""
-        with patch("subprocess.run") as mock_subprocess, \
-             patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=88) as mock_create:
-
-            result = ejecutar_scraper_facebook.invoke(
-                {"zonas": "Tijuana", "categorias": "Ferreterías"},
-                config=_make_config("user_fb")
-            )
-
-            mock_subprocess.assert_not_called()
-            mock_create.assert_called_once()
-            assert result  # No debe estar vacío
 
 
 # =============================================================================
@@ -182,62 +123,107 @@ class TestGestionarRecordatorio:
 # (Estos tests DEBEN FALLAR en ROJO hasta que se implemente FASE 2)
 # =============================================================================
 
-class TestBotDecouplingFromDB:
+class TestGoogleMapsHybridLogic:
     """
-    Sprint 1 - FASE 1: Verifica que el Bot NO persiste nada en la DB.
-    El Bot debe usar create_job_from_text con texto libre (zona + categoria).
-
-    ESTADO ESPERADO: ROJO — el código actual todavía llama a get_city_by_name,
-    get_or_create_category y get_or_create_city.
+    PRE Sprint 2.5 - FASE 1: Inteligencia Híbrida del Bot para ambos Catálogos.
+    ESTADO ESPERADO: ROJO — el código actual todavía usa get_or_create_category.
     """
 
-    def test_google_maps_bot_does_not_validate_city_in_db(self):
-        """Test S1-1.1: El bot NO debe llamar a get_city_by_name."""
-        with patch("src.core.tools_registry.StorageService.get_city_by_name") as mock_validate:
-            with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1):
-                ejecutar_scraper_google_maps.invoke({
-                    "zonas": "Berlin",
-                    "categorias": "Dentistas",
-                    "config": _make_config("owner_1")
-                })
-        mock_validate.assert_not_called()
+    def test_bot_uses_category_id_if_exists_in_master(self):
+        """Si la categoría existe en master_categories, el bot usa el category_id estructurado."""
+        with patch("src.core.tools_registry.StorageService.get_category_by_name", return_value={"id": 99}) as mock_cat, \
+             patch("src.core.tools_registry.StorageService.get_city_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_google_maps.invoke({"zonas": "Paris", "categorias": "Restaurantes"}, config=_make_config("user_1"))
+            
+            mock_cat.assert_called_once_with("Restaurantes")
+            kwargs = mock_create.call_args[1]
+            assert kwargs["category_id"] == 99
+            assert kwargs.get("categoria_text") is None
 
-    def test_google_maps_bot_does_not_create_category_in_db(self):
-        """Test S1-1.2: El bot NO debe llamar a get_or_create_category."""
-        with patch("src.core.tools_registry.StorageService.get_or_create_category") as mock_cat:
-            with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1):
-                ejecutar_scraper_google_maps.invoke({
-                    "zonas": "Berlin",
-                    "categorias": "Dentistas",
-                    "config": _make_config("owner_1")
-                })
-        mock_cat.assert_not_called()
+    def test_bot_uses_category_text_fallback_if_not_found(self):
+        """Si la categoría NO existe, usa categoria_text libre y category_id=None."""
+        with patch("src.core.tools_registry.StorageService.get_category_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.get_city_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_google_maps.invoke({"zonas": "Paris", "categorias": "Extraterrestres"}, config=_make_config("user_1"))
+            
+            kwargs = mock_create.call_args[1]
+            assert kwargs.get("category_id") is None
+            assert kwargs["categoria_text"] == "Extraterrestres"
 
-    def test_google_maps_bot_passes_free_text_to_create_job(self):
-        """Test S1-1.3: El bot llama a create_job_from_text con zona y categoria en texto libre."""
-        with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=42) as mock_create:
-            result = ejecutar_scraper_google_maps.invoke(
-                {"zonas": "Paris", "categorias": "Abogados"},
-                config=_make_config("owner_1")
-            )
+    def test_bot_uses_city_id_if_exists_in_master(self):
+        """Si la ciudad existe en master_cities, el bot usa el city_id y deja zona_text=None."""
+        with patch("src.core.tools_registry.StorageService.get_city_by_name", return_value={"id": 5}), \
+             patch("src.core.tools_registry.StorageService.get_category_by_name", return_value={"id": 99}), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_google_maps.invoke({"zonas": "Monterrey", "categorias": "Dentistas"}, config=_make_config("user_1"))
+            
+            kwargs = mock_create.call_args[1]
+            assert kwargs["city_id"] == 5
+            assert kwargs.get("zona_text") is None
 
-        mock_create.assert_called_once()
-        kwargs = mock_create.call_args[1]
-        assert kwargs["zona_text"] == "Paris"
-        assert kwargs["categoria_text"] == "Abogados"
-        assert kwargs["owner_id"] == "owner_1"
-        assert "42" in result
+    def test_bot_uses_free_text_if_city_not_found(self):
+        """Si la ciudad NO existe, se usa zona_text libre y city_id=None."""
+        with patch("src.core.tools_registry.StorageService.get_city_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.get_category_by_name", return_value={"id": 99}), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_google_maps.invoke({"zonas": "Aldea Perdida", "categorias": "Magos"}, config=_make_config("user_1"))
+            
+            kwargs = mock_create.call_args[1]
+            assert kwargs.get("city_id") is None
+            assert kwargs["zona_text"] == "Aldea Perdida"
 
 
-    def test_facebook_bot_does_not_create_city_or_category_in_db(self):
-        """Test S1-1.4: El bot de Facebook NO crea ciudad ni categoría en DB."""
-        with patch("src.core.tools_registry.StorageService.get_or_create_city") as mock_city:
-            with patch("src.core.tools_registry.StorageService.get_or_create_category") as mock_cat:
-                with patch("src.core.tools_registry.StorageService.create_job_from_text", return_value=1):
-                    ejecutar_scraper_facebook.invoke({
-                        "zonas": "Madrid",
-                        "categorias": "Plomeros",
-                        "config": _make_config("owner_1")
-                    })
-        mock_city.assert_not_called()
-        mock_cat.assert_not_called()
+class TestFacebookHybridLogic:
+    """Tests equivalentes para el scraper de Facebook."""
+
+    def test_bot_uses_category_id_if_exists_in_master(self):
+        with patch("src.core.tools_registry.StorageService.get_category_by_name", return_value={"id": 88}) as mock_cat, \
+             patch("src.core.tools_registry.StorageService.get_city_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_facebook.invoke({"zonas": "Madrid", "categorias": "Plomeros"}, config=_make_config("user_2"))
+            
+            mock_cat.assert_called_once_with("Plomeros")
+            kwargs = mock_create.call_args[1]
+            assert kwargs["category_id"] == 88
+            assert kwargs.get("categoria_text") is None
+
+    def test_bot_uses_category_text_fallback_if_not_found(self):
+        with patch("src.core.tools_registry.StorageService.get_category_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.get_city_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_facebook.invoke({"zonas": "Madrid", "categorias": "Unicornios"}, config=_make_config("user_2"))
+            
+            kwargs = mock_create.call_args[1]
+            assert kwargs.get("category_id") is None
+            assert kwargs["categoria_text"] == "Unicornios"
+
+    def test_bot_uses_city_id_if_exists_in_master(self):
+        with patch("src.core.tools_registry.StorageService.get_city_by_name", return_value={"id": 10}), \
+             patch("src.core.tools_registry.StorageService.get_category_by_name", return_value={"id": 88}), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_facebook.invoke({"zonas": "Guadalajara", "categorias": "Plomeros"}, config=_make_config("user_2"))
+            
+            kwargs = mock_create.call_args[1]
+            assert kwargs["city_id"] == 10
+            assert kwargs.get("zona_text") is None
+
+    def test_bot_uses_free_text_if_city_not_found(self):
+        with patch("src.core.tools_registry.StorageService.get_city_by_name", return_value=None), \
+             patch("src.core.tools_registry.StorageService.get_category_by_name", return_value={"id": 88}), \
+             patch("src.core.tools_registry.StorageService.create_hybrid_job", create=True) as mock_create:
+            
+            ejecutar_scraper_facebook.invoke({"zonas": "Villa Oculta", "categorias": "Carpinteros"}, config=_make_config("user_2"))
+            
+            kwargs = mock_create.call_args[1]
+            assert kwargs.get("city_id") is None
+            assert kwargs["zona_text"] == "Villa Oculta"
+
