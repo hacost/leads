@@ -5,6 +5,7 @@ from src.infrastructure.database.storage_service import StorageService
 from src.domain.engine.scrapers.scraper import GoogleMapsScraper
 from src.core.config import TELEGRAM_BOT_TOKEN
 from telegram import Bot
+import telegram.error
 from src.core.logging_config import setup_logging
 
 # Configuración global de logs del Worker
@@ -35,10 +36,17 @@ async def process_next_job() -> bool:
 
     try:
         if bot:
-            await bot.send_message(
-                chat_id=owner_id, 
-                text=f"🚀 Iniciando extracción asíncrona para {category_name} en {city_name}..."
-            )
+            try:
+                await bot.send_message(
+                    chat_id=owner_id, 
+                    text=f"🚀 Iniciando extracción asíncrona para {category_name} en {city_name}..."
+                )
+            except (telegram.error.Forbidden, telegram.error.BadRequest) as tg_err:
+                # La notificación de inicio es best-effort.
+                # Si el chat_id no es válido (ej. usuario creado desde el frontend con un ID de prueba),
+                # el job igualmente debe procesarse. Solo se loguea el warning.
+                logger.warning(f"⚠️ [Worker] No se pudo notificar inicio al usuario {owner_id}: {tg_err}. El job continúa.")
+
 
         # 3. Instanciar el Scraper aislando sesión y en modo headless (para servidor)
         scraper = GoogleMapsScraper(headless_override=True, session_id=owner_id)
@@ -53,26 +61,30 @@ async def process_next_job() -> bool:
         StorageService.update_job_status(job_id, 'completed')
         logger.info(f"✅ [Worker] Job #{job_id} completado con éxito.")
         
-        # 7. Enviar archivos resultantes y limpiar sesión
+        # 7. Enviar archivos resultantes y limpiar sesión (best-effort)
         if bot:
-            archivos = StorageService.fetch_excel_files_for_session(owner_id)
-            if len(archivos) > 0:
-                await bot.send_message(
-                    chat_id=owner_id, 
-                    text=f"✅ ¡Extracción completada para {category_name} en {city_name}! Aquí están tus reportes clasificados:"
-                )
-                for excel in archivos:
-                    nombre = StorageService.obtener_nombre_archivo(excel)
-                    with StorageService.obtener_stream_archivo(excel) as document:
-                        await bot.send_document(chat_id=owner_id, document=document)
-            else:
-                await bot.send_message(
-                    chat_id=owner_id, 
-                    text=f"✅ Extracción completada para {category_name} en {city_name}. Sin embargo, no se encontraron resultados nuevos (o no tienen teléfono/email públicos para clasificar)."
-                )
-            StorageService.eliminar_sesion(owner_id)
+            try:
+                archivos = StorageService.fetch_excel_files_for_session(owner_id)
+                if len(archivos) > 0:
+                    await bot.send_message(
+                        chat_id=owner_id, 
+                        text=f"✅ ¡Extracción completada para {category_name} en {city_name}! Aquí están tus reportes clasificados:"
+                    )
+                    for excel in archivos:
+                        nombre = StorageService.obtener_nombre_archivo(excel)
+                        with StorageService.obtener_stream_archivo(excel) as document:
+                            await bot.send_document(chat_id=owner_id, document=document)
+                else:
+                    await bot.send_message(
+                        chat_id=owner_id, 
+                        text=f"✅ Extracción completada para {category_name} en {city_name}. Sin embargo, no se encontraron resultados nuevos (o no tienen teléfono/email públicos para clasificar)."
+                    )
+                StorageService.eliminar_sesion(owner_id)
+            except (telegram.error.Forbidden, telegram.error.BadRequest) as tg_err:
+                logger.warning(f"⚠️ [Worker] No se pudo enviar notificación de completado al usuario {owner_id}: {tg_err}")
             
         return True
+
 
     except Exception as e:
         # En caso de catástrofe aseguramos que la cola no se bloquee.
@@ -80,10 +92,13 @@ async def process_next_job() -> bool:
         logger.error(f"❌ [Worker] Error crítico en Job #{job_id}: {str(e)}", exc_info=True)
         
         if bot:
-            await bot.send_message(
-                chat_id=owner_id,
-                text=f"❌ Hubo un fallo interno al extraer {category_name} en {city_name}. Detalles: {str(e)}"
-            )
+            try:
+                await bot.send_message(
+                    chat_id=owner_id,
+                    text=f"❌ Hubo un fallo interno al extraer {category_name} en {city_name}. Detalles: {str(e)}"
+                )
+            except Exception as notify_err:
+                logger.error(f"❌ [Worker] No se pudo enviar notificación de error al usuario: {notify_err}")
             
         return False
 

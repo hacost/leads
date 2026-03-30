@@ -201,4 +201,71 @@ class TestWorkerDualPath:
         # El scraper debe recibir los nombres del JOIN, no el ID
         mock_scraper_inst.scrape.assert_called_once_with(["Monterrey"], ["Dentistas"])
 
+@pytest.mark.asyncio
+@patch("src.application.batch_jobs.scraper_worker.StorageService")
+@patch("src.application.batch_jobs.scraper_worker.GoogleMapsScraper")
+@patch("src.application.batch_jobs.scraper_worker.Bot")
+async def test_job_continua_si_notificacion_inicio_falla_telegram_forbidden(mock_bot_class, mock_scraper_class, mock_storage):
+    """
+    ROJO → el worker actualmente ABORTA si la notificación inicial falla con Forbidden.
+    El diseño correcto: la notificación es best-effort → el job debe CONTINUAR y completarse.
+    """
+    import telegram.error
+    
+    mock_bot_inst = MagicMock()
+    # Falla en la notificación de inicio
+    mock_bot_inst.send_message = AsyncMock(side_effect=telegram.error.Forbidden("Chat not found"))
+    mock_bot_class.return_value = mock_bot_inst
 
+    mock_storage.get_pending_job.return_value = {
+        'id': 333, 'owner_id': 'invalid_chat',
+        'zona_text': 'Madrid', 'categoria_text': 'Dentistas'
+    }
+    mock_storage.fetch_excel_files_for_session.return_value = []
+
+    mock_scraper_inst = MagicMock()
+    mock_scraper_inst.scrape = AsyncMock()
+    mock_scraper_class.return_value = mock_scraper_inst
+
+    result = await process_next_job()
+
+    # La notificación falló, PERO el scraping debe haber ocurrido igual
+    mock_scraper_inst.scrape.assert_called_once()
+    # El job debe terminar como 'completed' (el scraping fue exitoso)
+    mock_storage.update_job_status.assert_called_with(333, 'completed')
+    assert result is True
+
+
+@pytest.mark.asyncio
+@patch("src.application.batch_jobs.scraper_worker.StorageService")
+@patch("src.application.batch_jobs.scraper_worker.GoogleMapsScraper")
+@patch("src.application.batch_jobs.scraper_worker.Bot")
+async def test_job_continua_si_notificacion_inicio_falla_telegram_bad_request(mock_bot_class, mock_scraper_class, mock_storage):
+    """
+    ROJO → 'Chat not found' es BadRequest (no Forbidden). El worker lo deja escapar como excepción
+    no capturada, causando el 'Error Crítico' en los logs.
+    El diseño correcto: ambos tipos de error de Telegram en la notificación son best-effort.
+    """
+    import telegram.error
+
+    mock_bot_inst = MagicMock()
+    # telegram.error.BadRequest es el error REAL de "Chat not found"
+    mock_bot_inst.send_message = AsyncMock(side_effect=telegram.error.BadRequest("Chat not found"))
+    mock_bot_class.return_value = mock_bot_inst
+
+    mock_storage.get_pending_job.return_value = {
+        'id': 444, 'owner_id': 'tenant_1',
+        'zona_text': 'Guadalajara', 'categoria_text': 'Plomeros'
+    }
+    mock_storage.fetch_excel_files_for_session.return_value = []
+
+    mock_scraper_inst = MagicMock()
+    mock_scraper_inst.scrape = AsyncMock()
+    mock_scraper_class.return_value = mock_scraper_inst
+
+    result = await process_next_job()
+
+    # El error BadRequest de Telegram NO debe abortar el job
+    mock_scraper_inst.scrape.assert_called_once()
+    mock_storage.update_job_status.assert_called_with(444, 'completed')
+    assert result is True

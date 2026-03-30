@@ -8,9 +8,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from src.core.security import es_usuario_permitido
 from src.infrastructure.audio.audio_service import transcribir_audio
 from src.application.ai_agents.agent_service import procesar_mensaje_agente
-from src.application.batch_jobs.scheduler_service import SchedulerService
+from src.infrastructure.notifications.telegram_service import TelegramService
 from src.core.config import AGENT_NAME, USER_TITLE, TELEGRAM_BOT_TOKEN
-
 from src.core.logging_config import setup_logging
 # Configuración global de logs del Bot
 logger = setup_logging("BOT")
@@ -56,10 +55,11 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         resultado = await procesar_mensaje_agente(texto_usuario, str(chat_id))
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=mensaje_estado.message_id,
-            text=resultado["respuesta_texto"]
+        await TelegramService.notificar_resultado_agente(
+            bot=context.bot,
+            chat_id=str(chat_id),
+            mensaje_estado=mensaje_estado,
+            resultado=resultado
         )
     except Exception as e:
         await context.bot.edit_message_text(
@@ -104,10 +104,11 @@ async def manejar_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Procesamiento con Agente
         resultado = await procesar_mensaje_agente(texto_usuario, str(chat_id))
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=mensaje_estado.message_id,
-            text=resultado["respuesta_texto"]
+        await TelegramService.notificar_resultado_agente(
+            bot=context.bot,
+            chat_id=str(chat_id),
+            mensaje_estado=mensaje_estado,
+            resultado=resultado
         )
         
     except Exception as e:
