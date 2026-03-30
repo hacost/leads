@@ -11,86 +11,107 @@ logger = logging.getLogger(__name__)
 DB_PATH = "data/bastion_bot.db"
 LEADS_DB_PATH = "data/leads.db"
 
-def _init_db():
+def _create_tables(conn):
+    """Crea el esquema normalizado Country→State→City sobre la conexión dada."""
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS master_countries (
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS master_states (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT    NOT NULL,
+            country_id INTEGER NOT NULL,
+            FOREIGN KEY (country_id) REFERENCES master_countries(id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scheduled_alerts (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id         TEXT    NOT NULL,
+            cron_expression TEXT    NOT NULL,
+            prompt_task     TEXT    NOT NULL,
+            is_active       BOOLEAN NOT NULL DEFAULT 1
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS master_cities (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT    NOT NULL,
+            state_id   INTEGER,
+            status     INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (state_id) REFERENCES master_states(id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS bot_sessions (
+            chat_id     TEXT PRIMARY KEY,
+            session_id  TEXT NOT NULL,
+            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS worker_config (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS master_categories (
+            id     INTEGER PRIMARY KEY AUTOINCREMENT,
+            name   TEXT    NOT NULL,
+            status INTEGER NOT NULL DEFAULT 1
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS batch_jobs (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_id    INTEGER,
+            city_id        INTEGER,
+            zona_text      TEXT,
+            categoria_text TEXT,
+            owner_id       TEXT NOT NULL,
+            status         TEXT NOT NULL DEFAULT 'pending',
+            created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (city_id)     REFERENCES master_cities(id),
+            FOREIGN KEY (category_id) REFERENCES master_categories(id)
+        )
+    ''')
+    for col in ("zona_text", "categoria_text"):
+        try:
+            cursor.execute(f"ALTER TABLE batch_jobs ADD COLUMN {col} TEXT")
+        except Exception:
+            pass
+    for table in ["master_countries", "master_states"]:
+        try:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN status INTEGER NOT NULL DEFAULT 1")
+        except Exception:
+            pass
+    cursor.execute("DROP TABLE IF EXISTS tenant_categories")
+    cursor.execute("DROP TABLE IF EXISTS countries")
+    cursor.execute("DROP TABLE IF EXISTS states")
+    conn.commit()
+
+
+def _init_db(conn_override=None):
+    """
+    Inicializa el esquema de la BD.
+    - conn_override: conexión SQLite externa (tests con :memory:). Crea tablas y retorna.
+    - Sin override: usa DB_PATH, crea tablas y NO siembra datos (per clean DB spec).
+    """
+    if conn_override is not None:
+        _create_tables(conn_override)
+        return
     os.makedirs("data", exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS scheduled_alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_id TEXT NOT NULL,
-                cron_expression TEXT NOT NULL,
-                prompt_task TEXT NOT NULL,
-                is_active BOOLEAN NOT NULL DEFAULT 1
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS master_cities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                state TEXT NOT NULL,
-                country TEXT NOT NULL,
-                status INTEGER NOT NULL DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # Seeder for master_cities
-        cursor.execute("SELECT COUNT(*) FROM master_cities")
-        if cursor.fetchone()[0] == 0:
-            logger.info("   [DB Seeder] Poblando master_cities por defecto...")
-            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Monterrey', 'NL', 'Mexico', 1)")
-            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Guadalajara', 'JAL', 'Mexico', 1)")
-            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Puebla', 'PUE', 'Mexico', 1)")
-            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES ('Mexico City', 'CDMX', 'Mexico', 1)")
-            conn.commit()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS bot_sessions (
-                chat_id TEXT PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS worker_config (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS master_categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                status INTEGER NOT NULL DEFAULT 1
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS batch_jobs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category_id INTEGER,
-                city_id INTEGER,
-                zona_text TEXT,
-                categoria_text TEXT,
-                owner_id TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (city_id) REFERENCES master_cities(id),
-                FOREIGN KEY (category_id) REFERENCES master_categories(id)
-            )
-        ''')
-        # Migration 1: add zona_text and categoria_text to existing DBs that predate this schema
-        for col in ("zona_text", "categoria_text"):
-            try:
-                cursor.execute(f"ALTER TABLE batch_jobs ADD COLUMN {col} TEXT")
-            except Exception:
-                pass  # Column already exists — safe to ignore
+        _create_tables(conn)
 
-        # 2. Eliminar la tabla obsoleta
-        cursor.execute("DROP TABLE IF EXISTS tenant_categories")
-
-        conn.commit()
 
 _init_db()
 
@@ -211,28 +232,54 @@ class StorageService:
     # ==========================================
 
     @staticmethod
-    def get_master_cities(limit: int = 100, offset: int = 0):
+    def get_master_cities(limit: int = 100, offset: int = 0, state_id: Optional[int] = None, conn_override=None):
+        base_query = '''
+            SELECT mc.id, mc.name, mc.state_id, mc.status, mc.created_at,
+                   s.name  AS state_name,
+                   co.name AS country_name
+            FROM master_cities mc
+            LEFT JOIN master_states    s  ON mc.state_id  = s.id
+            LEFT JOIN master_countries co ON s.country_id = co.id
+            WHERE mc.status = 1
+        '''
+        params = []
+        if state_id is not None:
+            base_query += " AND mc.state_id = ?"
+            params.append(state_id)
+            
+        base_query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        if conn_override is not None:
+            conn_override.row_factory = sqlite3.Row
+            cursor = conn_override.cursor()
+            cursor.execute(base_query, tuple(params))
+            return [dict(row) for row in cursor.fetchall()]
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM master_cities WHERE status=1 LIMIT ? OFFSET ?", (limit, offset))
+            cursor.execute(base_query, tuple(params))
             return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
-    def create_master_city(name: str, state: str, country: str = "Mexico") -> int:
-        """Crea una nueva ciudad maestra manualmente (dinámico para soportar DB legacy)."""
+    def create_master_city(name: str, state_id: int, conn_override=None) -> int:
+        """Crea una nueva ciudad vinculada a un estado del catálogo."""
+        if conn_override is not None:
+            cursor = conn_override.cursor()
+            cursor.execute("INSERT INTO master_cities (name, state_id, status) VALUES (?, ?, 1)", (name, state_id))
+            conn_override.commit()
+            return cursor.lastrowid
         with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
-            # The table now always has 'country' and 'status'
-            cursor.execute("INSERT INTO master_cities (name, state, country, status) VALUES (?, ?, ?, 1)", (name, state, country))
+            cursor.execute("INSERT INTO master_cities (name, state_id, status) VALUES (?, ?, 1)", (name, state_id))
             conn.commit()
             return cursor.lastrowid
 
     @staticmethod
-    def update_master_city(city_id: int, name: str, state: str, country: str) -> bool:
+    def update_master_city(city_id: int, name: str, state_id: int) -> bool:
         with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
-            cursor.execute("UPDATE master_cities SET name=?, state=?, country=? WHERE id=?", (name, state, country, city_id))
+            cursor.execute("UPDATE master_cities SET name=?, state_id=? WHERE id=?", (name, state_id, city_id))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -245,22 +292,16 @@ class StorageService:
             return cursor.rowcount > 0
 
     @staticmethod
-    def get_or_create_city(name: str, state: str = "XX") -> int:
+    def get_or_create_city(name: str) -> Optional[int]:
+        """
+        Busca una ciudad por nombre (case-insensitive).
+        NOTA: El catálogo es cerrado — ya NO crea ciudades. Devuelve None si no existe.
+        """
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
-            # Búsqueda case as insensitive as possible using COLLATE NOCASE
             cursor.execute("SELECT id FROM master_cities WHERE name COLLATE NOCASE = ?", (name,))
             row = cursor.fetchone()
-            if row:
-                return row[0]
-            
-            # Si no existe, la creamos con valores por defecto
-            cursor.execute(
-                "INSERT INTO master_cities (name, state, country) VALUES (?, 'N/A', 'N/A')",
-                (name,)
-            )
-            conn.commit()
-            return cursor.lastrowid
+            return row[0] if row else None
 
     @staticmethod
     def get_city_by_name(name: str) -> Optional[dict]:
@@ -318,6 +359,105 @@ class StorageService:
             cursor.execute("SELECT * FROM master_categories WHERE name COLLATE NOCASE = ?", (name,))
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    # ==========================================
+    # CATÁLOGO NORMALIZADO: COUNTRIES & STATES
+    # ==========================================
+
+    @staticmethod
+    def create_country(name: str, conn_override=None) -> int:
+        """Crea un país en el catálogo global. Devuelve su ID."""
+        if conn_override is not None:
+            cursor = conn_override.cursor()
+            cursor.execute("INSERT INTO master_countries (name) VALUES (?)", (name,))
+            conn_override.commit()
+            return cursor.lastrowid
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO master_countries (name) VALUES (?)", (name,))
+            conn.commit()
+            return cursor.lastrowid
+
+    @staticmethod
+    def create_state(name: str, country_id: int, conn_override=None) -> int:
+        """Crea un estado vinculado a un país. Devuelve su ID."""
+        try:
+            if conn_override is not None:
+                cursor = conn_override.cursor()
+                cursor.execute(
+                    "INSERT INTO master_states (name, country_id) VALUES (?, ?)", 
+                    (name, country_id)
+                )
+                conn_override.commit()
+                return cursor.lastrowid
+            with sqlite3.connect(DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO master_states (name, country_id) VALUES (?, ?)", 
+                    (name, country_id)
+                )
+                conn.commit()
+                return cursor.lastrowid
+        except sqlite3.IntegrityError:
+            raise ValueError(f"No existe el country_id {country_id} para ligar este estado.")
+
+    @staticmethod
+    def update_country(country_id: int, name: str) -> bool:
+        """Actualiza el nombre de un país. Retorna False si no existe."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE master_countries SET name = ? WHERE id = ? AND status = 1", (name, country_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def update_state(state_id: int, name: str) -> bool:
+        """Actualiza el nombre de un estado. Retorna False si no existe."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE master_states SET name = ? WHERE id = ? AND status = 1", (name, state_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def delete_state_with_cascade(state_id: int) -> bool:
+        """Hace Soft Delete de un estado y desactiva todas sus ciudades dependientes."""
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE master_states SET status = 0 WHERE id = ?", (state_id,))
+            if cursor.rowcount == 0:
+                return False
+            cursor.execute("UPDATE master_cities SET status = 0 WHERE state_id = ?", (state_id,))
+            conn.commit()
+            return True
+
+    @staticmethod
+    def get_countries(conn_override=None) -> List[Dict]:
+        """Retorna todos los países activos del catálogo."""
+        if conn_override is not None:
+            conn_override.row_factory = sqlite3.Row
+            cursor = conn_override.cursor()
+            cursor.execute("SELECT * FROM master_countries WHERE status=1 ORDER BY name ASC")
+            return [dict(row) for row in cursor.fetchall()]
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM master_countries WHERE status=1 ORDER BY name ASC")
+            return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def get_states_by_country(country_id: int, conn_override=None) -> List[Dict]:
+        """Retorna todos los estados activos de un país."""
+        if conn_override is not None:
+            conn_override.row_factory = sqlite3.Row
+            cursor = conn_override.cursor()
+            cursor.execute("SELECT * FROM master_states WHERE country_id=? AND status=1 ORDER BY name ASC", (country_id,))
+            return [dict(row) for row in cursor.fetchall()]
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM master_states WHERE country_id=? AND status=1 ORDER BY name ASC", (country_id,))
+            return [dict(row) for row in cursor.fetchall()]
 
     @staticmethod
     def get_jobs(owner_id: str, limit: int = 50, offset: int = 0):
@@ -407,6 +547,29 @@ class StorageService:
             )
             conn.commit()
             return cursor.lastrowid
+
+    @staticmethod
+    def create_batch_jobs(jobs_payloads: List[tuple]) -> int:
+        """
+        Inserta múltiples trabajos de forma atómica usando executemany.
+        jobs_payloads debe ser lista de tuplas: 
+        (category_id, categoria_text, city_id, zona_text, owner_id)
+        """
+        if not jobs_payloads:
+            return 0
+            
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT INTO batch_jobs 
+                (category_id, categoria_text, city_id, zona_text, owner_id, status) 
+                VALUES (?, ?, ?, ?, ?, 'pending')
+                """,
+                jobs_payloads
+            )
+            conn.commit()
+            return cursor.rowcount
             
     @staticmethod
     def get_pending_job():
@@ -500,8 +663,11 @@ class StorageService:
             cursor.execute("SELECT (strftime('%s', 'now') - strftime('%s', value)) < 60 FROM worker_config WHERE key = 'last_heartbeat'")
             is_recent = cursor.fetchone()[0]
             
+            # El estado es 'online' solo si hay latido RECIENTE y el switch está ACTIVADO
+            is_enabled = StorageService.get_worker_enabled()
+            
             return {
-                "status": "online" if is_recent else "offline",
+                "status": "online" if (is_recent and is_enabled) else "offline",
                 "last_heartbeat": row[0]
             }
 
