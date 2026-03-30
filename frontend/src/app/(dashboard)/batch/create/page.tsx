@@ -53,7 +53,7 @@ export default function CreateBatchPage() {
   
   // Load total cities for accurate global counts
   useEffect(() => {
-    api.get<City[]>('/api/cities?limit=10000')
+    api.get<City[]>('/api/locations/cities?limit=10000')
       .then(res => setTotalCitiesDB(res?.length || 0))
       .catch(() => {})
   }, [])
@@ -69,7 +69,7 @@ export default function CreateBatchPage() {
 
   // Load Countries on mount
   useEffect(() => {
-    api.get<Country[]>("/api/countries")
+    api.get<Country[]>("/api/locations/countries")
       .then(res => setCountries(res || []))
       .catch(() => toast.error("Failed to load countries"))
   }, [])
@@ -80,10 +80,9 @@ export default function CreateBatchPage() {
       setStates([]); setSelectedState(""); setCities([]); setSelectedCity("");
       return
     }
-    api.get<State[]>(`/api/states?country_id=${selectedCountry}`)
+    api.get<State[]>(`/api/locations/states?country_id=${selectedCountry}`)
       .then(res => {
         setStates(res || [])
-        // Opcional: auto-seleccionar si solo hay 1 estado
       })
       .catch(() => toast.error("Failed to load states"))
   }, [selectedCountry])
@@ -94,10 +93,10 @@ export default function CreateBatchPage() {
       setCities([]); setSelectedCity(""); setManualCities([]);
       return
     }
-    api.get<City[]>(`/api/cities?state_id=${selectedState}`)
+    api.get<City[]>(`/api/locations/cities?state_id=${selectedState}`)
       .then(res => {
         setCities(res || [])
-        setManualCities((res || []).map(c => c.id)) // Pre-check all on load
+        setManualCities((res || []).map(c => c.id))
       })
       .catch(() => toast.error("Failed to load cities"))
   }, [selectedState])
@@ -190,13 +189,13 @@ export default function CreateBatchPage() {
     <div className="max-w-6xl mx-auto mb-10 text-slate-50 font-sans">
       <div className="flex flex-col md:flex-row justify-between items-end mb-8 space-y-4 md:space-y-0">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+          <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-linear-to-r from-white to-slate-400">
             Create Batch Builder
           </h1>
           <p className="text-slate-400 mt-2 font-medium">Deploy scraping jobs across multiple targets for a single category.</p>
         </div>
         <div>
-          <span className="bg-gradient-to-r from-blue-500 to-violet-500 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg shadow-blue-500/20">
+          <span className="bg-linear-to-r from-blue-500 to-violet-500 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg shadow-blue-500/20">
             Pro Enterprise
           </span>
         </div>
@@ -341,7 +340,7 @@ export default function CreateBatchPage() {
                       <label className="flex items-center gap-3 cursor-pointer text-sm font-medium">
                         <input 
                           type="radio" 
-                          className="w-4 h-4 text-blue-500 bg-[#020617] border-slate-700 bg-black" 
+                          className="w-4 h-4 text-blue-500 border-slate-700 bg-black" 
                           checked={stateMode === 'all'} 
                           onChange={() => setStateMode('all')} 
                         />
@@ -350,7 +349,7 @@ export default function CreateBatchPage() {
                       <label className="flex items-center gap-3 cursor-pointer text-sm font-medium">
                         <input 
                           type="radio" 
-                          className="w-4 h-4 text-blue-500 bg-[#020617] border-slate-700 bg-black" 
+                          className="w-4 h-4 text-blue-500 border-slate-700 bg-black" 
                           checked={stateMode === 'manual'} 
                           onChange={() => setStateMode('manual')} 
                         />
@@ -392,7 +391,7 @@ export default function CreateBatchPage() {
                 {/* Scope = Global */}
                 {scope === 'global' && (
                   <div className="space-y-6 pt-2">
-                    <div className="bg-amber-900/10 border border-amber-900/30 rounded-xl p-4 flex gap-4 p-4">
+                    <div className="bg-amber-900/10 border border-amber-900/30 rounded-xl flex gap-4 p-4">
                       <Rocket className="text-amber-500 w-6 h-6 shrink-0 mt-0.5" />
                       <div>
                         <h4 className="font-bold text-amber-500 text-sm">Full National Deployment</h4>
@@ -423,7 +422,7 @@ export default function CreateBatchPage() {
 
         {/* SUMMARY SIDEBAR */}
         <div className="lg:col-span-4">
-          <Card className="bg-gradient-to-b from-[#0f172a] to-[#020617] border-slate-800 sticky top-6 shadow-xl shadow-black/30 rounded-2xl overflow-hidden">
+          <Card className="bg-linear-to-b from-[#0f172a] to-[#020617] border-slate-800 sticky top-6 shadow-xl shadow-black/30 rounded-2xl overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-xl font-bold text-white">Deployment Summary</CardTitle>
               <CardDescription className="text-slate-400">Estimated results</CardDescription>
