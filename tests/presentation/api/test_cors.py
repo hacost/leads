@@ -21,18 +21,24 @@ def test_cors_allows_localhost_origin():
 
 def test_cors_allows_remote_network_origin():
     """
-    Verifica que la IP de la red local 192.168.100.22:3000 sea aceptada.
+    Verifica que la IP de la red local configurada en el .env sea aceptada.
     """
-    origin = "http://192.168.100.22:3000"
+    from src.core.config import ALLOWED_ORIGINS
+    # Buscamos un origen que parezca una IP de LAN (no localhost, no 127.0.0.1)
+    remote_ip_origin = next((o for o in ALLOWED_ORIGINS if "localhost" not in o and "127.0.0.1" not in o), None)
+    
+    if not remote_ip_origin:
+        pytest.skip("No se encontró una IP remota en ALLOWED_ORIGINS para probar.")
+        
     response = client.options(
         "/health",
         headers={
-            "Origin": origin,
+            "Origin": remote_ip_origin,
             "Access-Control-Request-Method": "GET",
         }
     )
     assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == origin
+    assert response.headers.get("access-control-allow-origin") == remote_ip_origin
 
 def test_cors_full_matrix():
     """

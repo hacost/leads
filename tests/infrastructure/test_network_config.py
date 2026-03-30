@@ -4,12 +4,12 @@ from src.core.config import ALLOWED_ORIGINS
 
 def test_env_contains_valid_network_ip():
     """
-    Valida que la variable ALLOWED_ORIGINS en el .env contenga una IP de red válida.
+    Valida que la variable ALLOWED_ORIGINS en el .env contenga una IP de red válida (LAN).
     """
-    # Intentamos leer el archivo .env directamente o el entorno
-    origins = os.getenv("ALLOWED_ORIGINS", "")
-    assert "192.168.100.22" in origins or "172." in origins or "10." in origins, \
-        "ALLOWED_ORIGINS debe contener la IP de la red local para acceso profesional."
+    # Validamos que al menos uno de los orígenes sea una IP de red privada (RFC 1918)
+    assert any(
+        "192.168." in o or "172." in o or "10." in o for o in ALLOWED_ORIGINS
+    ), "ALLOWED_ORIGINS debe contener al menos una IP de red local (LAN) para acceso profesional."
 
 def test_cors_config_loading():
     """

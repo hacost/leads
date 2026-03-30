@@ -21,37 +21,27 @@ def clean_db():
         os.remove(temp_path)
 
 class TestStorageServiceTDD:
-    def test_get_or_create_city_creates_new_city(self):
-        """Si la ciudad no existe, debe crearla y devolver el nuevo ID."""
-        city_id = StorageService.get_or_create_city("Nueva_Ciudad")
-        assert city_id > 0
-        
-        # Verificar que se insertó correctamente
-        with sqlite3.connect(StorageService.get_db_path()) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM master_cities WHERE id=?", (city_id,))
-            row = cursor.fetchone()
-            assert row is not None
-            assert row['name'] == "Nueva_Ciudad"
-            assert row['state'] == "N/A"
-            assert row['country'] == "N/A"
+    def test_get_or_create_city_returns_none_if_not_in_catalog(self):
+        """El catálogo es cerrado: si la ciudad no existe, devuelve None (ya no crea)."""
+        result = StorageService.get_or_create_city("CiudadQueNoExiste")
+        assert result is None
 
-    def test_get_or_create_city_returns_existing(self):
-        """Si la ciudad ya existe (sin importar mayúsculas), debe devolver el ID existente y no duplicar."""
-        # Insertamos manualmente
+    def test_get_or_create_city_returns_existing_if_in_catalog(self):
+        """Si la ciudad YA existe en el catálogo, devuelve su ID correctamente."""
         with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO master_cities (name, state, country) VALUES (?, ?, ?)", ("San Pedro", "NL", "Mexico"))
+            cursor.execute("INSERT OR IGNORE INTO master_countries (name) VALUES ('Mexico')")
+            cursor.execute("SELECT id FROM master_countries WHERE name='Mexico'")
+            mx_id = cursor.fetchone()[0]
+            cursor.execute("INSERT INTO master_states (name, country_id) VALUES ('NL', ?)", (mx_id,))
+            state_id = cursor.lastrowid
+            cursor.execute("INSERT INTO master_cities (name, state_id) VALUES ('San Pedro', ?)", (state_id,))
             conn.commit()
             original_id = cursor.lastrowid
-            
-        # Llamamos al método
-        city_id = StorageService.get_or_create_city("san pedro") # Diferente casing
-        
+
+        city_id = StorageService.get_or_create_city("san pedro")  # Diferente casing
         assert city_id == original_id
-        
-        # Verificar que no hay duplicados
+
         with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM master_cities WHERE name COLLATE NOCASE = ?", ("san pedro",))
@@ -96,10 +86,14 @@ class TestStorageServiceTDD:
                 # DDL
                 _init_db()
                 
-                # Insert database state
+                # Insert database state with normalized schema
                 with sqlite3.connect(temp_path) as conn:
                     cursor = conn.cursor()
-                    cursor.execute("INSERT INTO master_cities (id, name, state, country) VALUES (10, 'City', 'State', 'Country')")
+                    cursor.execute("INSERT INTO master_countries (name) VALUES ('Country')")
+                    country_id = cursor.lastrowid
+                    cursor.execute("INSERT INTO master_states (name, country_id) VALUES ('State', ?)", (country_id,))
+                    state_id = cursor.lastrowid
+                    cursor.execute("INSERT INTO master_cities (id, name, state_id) VALUES (10, 'City', ?)", (state_id,))
                     cursor.execute("INSERT INTO master_categories (id, name) VALUES (10, 'Category')")
                     cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (1, 10, 10, 'owner', 'pending')")
                     cursor.execute("INSERT INTO batch_jobs (id, category_id, city_id, owner_id, status) VALUES (2, 10, 10, 'owner', 'pending')")
@@ -140,10 +134,15 @@ class TestStorageServiceTDD:
 
     def test_get_job_by_id_with_joins(self):
         """get_job_by_id debe traer los nombres de categoría y ciudad mediante JOINs."""
-        # Setup data
+        # Setup data with normalized schema
         with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO master_cities (name, state, country) VALUES ('Veracruz', 'VER', 'Mexico')")
+            cursor.execute("INSERT OR IGNORE INTO master_countries (name) VALUES ('Mexico')")
+            cursor.execute("SELECT id FROM master_countries WHERE name='Mexico'")
+            mx_id = cursor.fetchone()[0]
+            cursor.execute("INSERT INTO master_states (name, country_id) VALUES ('VER', ?)", (mx_id,))
+            state_id = cursor.lastrowid
+            cursor.execute("INSERT INTO master_cities (name, state_id) VALUES ('Veracruz', ?)", (state_id,))
             city_id = cursor.lastrowid
             cursor.execute("INSERT INTO master_categories (name) VALUES ('Hoteles')")
             cat_id = cursor.lastrowid
@@ -159,8 +158,12 @@ class TestStorageServiceTDD:
         """get_jobs con offset=1 debe saltarse el primer (más reciente) job."""
         with sqlite3.connect(StorageService.get_db_path()) as conn:
             cursor = conn.cursor()
-            # Setup mandatory cities and categories for the JOIN to work (letting DB choose IDs)
-            cursor.execute("INSERT INTO master_cities (name, state, country) VALUES ('C1', 'S1', 'MX')")
+            # Setup with normalized schema
+            cursor.execute("INSERT INTO master_countries (name) VALUES ('MX')")
+            mx_id = cursor.lastrowid
+            cursor.execute("INSERT INTO master_states (name, country_id) VALUES ('S1', ?)", (mx_id,))
+            state_id = cursor.lastrowid
+            cursor.execute("INSERT INTO master_cities (name, state_id) VALUES ('C1', ?)", (state_id,))
             city_id = cursor.lastrowid
             cursor.execute("INSERT INTO master_categories (name) VALUES ('Cat1')")
             cat_id = cursor.lastrowid

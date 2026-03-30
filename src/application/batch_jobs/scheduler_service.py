@@ -82,9 +82,9 @@ class SchedulerService:
             # 2. Pasamos el prompt al "Cerebro" (LangGraph)
             resultado = await procesar_mensaje_agente(prompt_task, chat_id)
             
-            # 3. Mandamos resultados usando la UI centralizada para cumplir con el principio DRY
-            from src.presentation.telegram_bot.telegram_bot import enviar_resultados_al_chat
-            await enviar_resultados_al_chat(bot, chat_id, mensaje_estado, resultado)
+            # 3. Mandamos resultados usando el Notificador centralizado (Principio DRY)
+            from src.infrastructure.notifications.telegram_service import TelegramService
+            await TelegramService.notificar_resultado_agente(bot, str(chat_id), mensaje_estado, resultado)
                 
         except Exception as e:
             await bot.edit_message_text(

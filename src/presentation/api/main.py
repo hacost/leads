@@ -7,7 +7,7 @@ from src.core.config import ALLOWED_ORIGINS
 
 # Router imports
 from .auth import router as auth_router
-from .master_cities import router as master_cities_router
+from .locations import router as locations_router
 from .categories import router as categories_router
 from .jobs import router as jobs_router
 from .admin import router as admin_router
@@ -67,7 +67,7 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(auth_router)
-app.include_router(master_cities_router)
+app.include_router(locations_router)
 app.include_router(categories_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)

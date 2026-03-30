@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from datetime import datetime
 
 from src.presentation.api.auth import get_current_user
@@ -10,13 +10,38 @@ from src.infrastructure.database.storage_service import StorageService
 router = APIRouter(prefix="/api/jobs", tags=["Batch Jobs"])
 
 class JobCreate(BaseModel):
-    category_id: int
-    city_id: int
+    category_id: Optional[int] = None
+    city_id: Optional[int] = None
+    categoria_text: Optional[str] = None
+    zona_text: Optional[str] = None
+
+    @model_validator(mode='after')
+    def check_category_exists(self) -> 'JobCreate':
+        if not self.category_id and not self.categoria_text:
+            raise ValueError("Debe proporcionar al menos un ID de categoría o un texto de categoría libre.")
+        return self
 
 # We extend the BatchJob model to include the joined names for the UI
 class BatchJobView(BatchJob):
     category_name: Optional[str] = "Unknown"
     city_name: Optional[str] = "Unknown"
+
+    @model_validator(mode='after')
+    def resolve_hybrid_names(self):
+        """
+        Si los nombres resueltos por JOIN son nulos o 'Unknown' (porque el Job no usa 
+        el catálogo maestro), usamos los campos de texto libre para que el Dashboard 
+        muestre algo útil.
+        """
+        if not self.category_name or self.category_name == "Unknown":
+            if self.categoria_text:
+                self.category_name = self.categoria_text
+        
+        if not self.city_name or self.city_name == "Unknown":
+            if self.zona_text:
+                self.city_name = self.zona_text
+                
+        return self
 
 @router.get("", response_model=List[BatchJobView])
 async def get_jobs(
@@ -78,16 +103,59 @@ async def create_job(job: JobCreate, current_user: dict = Depends(get_current_us
     if not owner_id:
         raise HTTPException(status_code=401, detail="Invalid token")
         
-    job_id = StorageService.create_job(
+    job_id = StorageService.create_hybrid_job(
         category_id=job.category_id, 
-        city_id=job.city_id, 
+        categoria_text=job.categoria_text,
+        city_id=job.city_id,
+        zona_text=job.zona_text,
         owner_id=owner_id
     )
     
     return BatchJob(
         id=job_id, 
         category_id=job.category_id, 
+        categoria_text=job.categoria_text,
         city_id=job.city_id, 
+        zona_text=job.zona_text,
         owner_id=owner_id,
         status=JobStatus.PENDING
     )
+
+class BatchCreate(BaseModel):
+    category_id: int
+    city_id: Optional[int] = None
+    state_id: Optional[int] = None
+    all_cities: Optional[bool] = False
+    max_leads: Optional[int] = 50
+
+@router.post("/batch", status_code=201)
+async def create_batch_jobs(payload: BatchCreate, current_user: dict = Depends(get_current_user)):
+    """
+    Creates multiple scraping jobs at once for a given category across multiple cities.
+    """
+    owner_id = current_user.get("sub")
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if not payload.city_id and not payload.state_id and not payload.all_cities:
+        raise HTTPException(status_code=400, detail="Must specify city_id, state_id, or all_cities=true")
+
+    target_cities = []
+    if payload.all_cities:
+        target_cities = StorageService.get_master_cities(limit=10000)
+    elif payload.state_id:
+        target_cities = StorageService.get_master_cities(limit=10000, state_id=payload.state_id)
+    elif payload.city_id:
+        target_cities = [{"id": payload.city_id}]
+
+    if not target_cities:
+        raise HTTPException(status_code=404, detail="No target cities found")
+
+    jobs_payloads = [
+        (payload.category_id, None, city["id"], None, owner_id)
+        for city in target_cities
+    ]
+
+    count = StorageService.create_batch_jobs(jobs_payloads)
+    
+    return {"message": f"{count} Jobs Enqueued successfully in batch"}

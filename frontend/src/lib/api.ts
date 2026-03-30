@@ -44,7 +44,7 @@ class ApiClient {
       try {
         const errorData = await response.json()
         errorMessage = errorData.message || errorData.detail || errorMessage
-      } catch (e) {
+      } catch (e: unknown) {
         // Fallback if not JSON
       }
       

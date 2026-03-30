@@ -33,7 +33,7 @@ def test_get_cities_with_dynamic_pagination(auth_client):
         for limit in [10, 20, 30, 50, 100]:
             response = auth_client.get(f"/api/cities?limit={limit}&offset=0")
             assert response.status_code == 200
-            mock_get.assert_called_with(limit=limit, offset=0)
+            mock_get.assert_called_with(limit=limit, offset=0, state_id=None)
 
 def test_get_jobs_with_various_limits(auth_client):
     """Verifica que el endpoint de jobs acepte límites de 10, 20, 30, 50 y 100."""

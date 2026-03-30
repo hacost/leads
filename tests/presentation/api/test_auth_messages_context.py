@@ -60,5 +60,5 @@ def test_city_update_forbidden_message():
     data = response.json()
     
     assert "error" in data
-    assert "Only admins can modify" in data["message"]
+    assert "Admin role required" in data["message"]
     assert data["code"] == "AUTH_ERROR"
