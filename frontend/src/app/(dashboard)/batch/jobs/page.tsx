@@ -22,12 +22,14 @@ export default function JobsPage() {
   // Pagination State
   const [page, setPage] = useState(0)
   const [limit, setLimit] = useState(10)
+  const [lastSync, setLastSync] = useState<Date | null>(null)
 
   const fetchJobs = async () => {
     try {
       const offset = page * limit
       const data = await api.get<any[]>(`/api/jobs?limit=${limit}&offset=${offset}`)
       setJobs(data || [])
+      setLastSync(new Date())
     } catch (err) {
       console.error(err)
     } finally {
@@ -47,7 +49,7 @@ export default function JobsPage() {
   useEffect(() => {
     setIsMounted(true)
     fetchJobs()
-    const interval = setInterval(fetchJobs, 10000)
+    const interval = setInterval(fetchJobs, 5000) // Reduced to 5s
     return () => clearInterval(interval)
   }, [page, limit]) // Refetch on page or limit change
 
@@ -63,7 +65,15 @@ export default function JobsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Scraping Queue Monitor</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-white">Scraping Queue Monitor</h1>
+            {lastSync && (
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase tracking-widest bg-slate-900/50 px-2 py-1 rounded border border-slate-800">
+                <div className="h-1 w-1 rounded-full bg-blue-500 animate-pulse" />
+                Live: {lastSync.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
           <p className="text-slate-400 mt-2">Track and manage your batch scraping jobs in real-time.</p>
         </div>
         <Link href="/batch/create">

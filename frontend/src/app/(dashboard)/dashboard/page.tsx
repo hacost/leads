@@ -17,17 +17,21 @@ export default function DashboardPage() {
   const [workerHealth, setWorkerHealth] = useState({ status: 'offline', last_heartbeat: null })
   const [toggling, setToggling] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const [lastSync, setLastSync] = useState<Date | null>(null)
 
   const fetchDashboardData = async () => {
     try {
-      const [jobsData, workerConfig, healthData] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get<any[]>('/api/jobs'),
         api.get<{is_enabled: boolean}>('/api/admin/worker'),
         api.get<{status: string, last_heartbeat: any}>('/api/admin/worker/health')
       ])
-      setJobs(jobsData || [])
-      if (workerConfig) setMasterSwitch(workerConfig.is_enabled)
-      if (healthData) setWorkerHealth(healthData)
+      
+      if (results[0].status === 'fulfilled') setJobs(results[0].value || [])
+      if (results[1].status === 'fulfilled') setMasterSwitch(results[1].value.is_enabled)
+      if (results[2].status === 'fulfilled') setWorkerHealth(results[2].value)
+      
+      setLastSync(new Date())
       setError(null)
     } catch (err: any) {
       setError(err?.message || "Failed to load dashboard data")
@@ -39,9 +43,10 @@ export default function DashboardPage() {
   const toggleMasterSwitch = async () => {
     setToggling(true)
     try {
-      // Backend expects 'is_enabled' as defined in src/presentation/api/admin.py
       const resp = await api.patch<{is_enabled: boolean}>('/api/admin/worker', { is_enabled: !masterSwitch })
       setMasterSwitch(resp.is_enabled)
+      // Force immediate refresh of health status to show 'offline' faster
+      await fetchDashboardData()
     } catch (err: any) {
       alert("Failed to toggle Master Switch: " + (err?.message || "Unknown error"))
     } finally {
@@ -52,7 +57,7 @@ export default function DashboardPage() {
   useEffect(() => {
     setIsMounted(true)
     fetchDashboardData()
-    const interval = setInterval(fetchDashboardData, 30000)
+    const interval = setInterval(fetchDashboardData, 5000) // Reduced to 5s for real-time feel
     return () => clearInterval(interval)
   }, [])
 
@@ -75,6 +80,12 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight text-white">Dashboard Overview</h1>
+        {lastSync && (
+          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium uppercase tracking-widest bg-slate-900/50 px-3 py-1.5 rounded-full border border-slate-800">
+            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+            Live Sync: {lastSync.toLocaleTimeString()}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -106,9 +117,9 @@ export default function DashboardPage() {
             <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Worker Status</span>
               <Badge variant="outline" className={`text-[10px] ${
-                workerHealth.status === 'online' ? 'border-green-500/50 text-green-400 bg-green-500/10' : 'border-red-500/50 text-red-400 bg-red-500/10'
+                (masterSwitch && workerHealth.status === 'online') ? 'border-green-500/50 text-green-400 bg-green-500/10' : 'border-red-500/50 text-red-400 bg-red-500/10'
               }`}>
-                {workerHealth.status.toUpperCase()}
+                {(masterSwitch && workerHealth.status === 'online') ? 'ONLINE' : 'OFFLINE'}
               </Badge>
             </div>
           </CardContent>

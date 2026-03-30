@@ -1,5 +1,5 @@
 import os
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from src.core.tools_registry import ejecutar_scraper_google_maps, ejecutar_scraper_facebook, gestionar_recordatorio
 from src.core.config import LLM_MODEL, AGENT_NAME, USER_TITLE
 
@@ -47,12 +47,13 @@ system_prompt = f"""
     1. Tratar de empezar las respuestas de manera cordial, mencionando el nombre '{AGENT_NAME}'.
     2. Si el {USER_TITLE} pide buscar leads pero no especifica la plataforma, invoca la herramienta de GOOGLE MAPS.
     3. Si el {USER_TITLE} te pide "avisarle", "recordarle", o hacer algo "todos los días/lunes/etc.", invoca la herramienta `gestionar_recordatorio` con la acción 'agendar'. Tú debes deducir y crear la expresión CRON válida de 5 campos.
-    4. Cuando las herramientas devuelvan éxito (ej. búsqueda de leads), usa esa información para responder cortésmente y decir la ruta del archivo generado.
-    5. Cero explicaciones técnicas aburridas. Responde como un asistente humano, eficiente y conciso.
+    4. Las herramientas de BUSQUEDA DE LEADS (Google Maps o Facebook) son procesos ASINCRONOS. Al ejecutarlas, la tarea se encola de fondo. Responde SIEMPRE de forma natural confirmando que la búsqueda ha sido iniciada y que Bastioncito notificará al Amo cuando los archivos estén listos.
+    5. PROHIBIDO: Inventar rutas de archivos, carpetas o nombres de archivos .xlsx en tu respuesta inicial. Los archivos NO existen hasta que el Worker termina su trabajo. No menciones rutas ni para alertas ni para búsquedas inmediatas. 
+    6. Mantén una personalidad atenta, profesional y de extrema confianza. Cero explicaciones técnicas aburridas. Responde como un asistente humano, eficiente y conciso.
 """
 
-agente_graph = create_react_agent(
+agente_graph = create_agent(
     model=llm,
     tools=herramientas_del_agente,
-    prompt=system_prompt
+    system_prompt=system_prompt
 )

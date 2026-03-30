@@ -10,9 +10,52 @@ ESTRATEGIA DE MOCKS (testing_strategy.md, capa Application/LangGraph):
 - `agente_graph.invoke`: se parchea en el módulo de agent_service donde está importado
 - No se llama ningún LLM real ni se ejecuta LangGraph
 """
+import ast
+import pathlib
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from langchain_core.messages import HumanMessage, AIMessage
+
+
+# =============================================================================
+# GRUPO 0: Contrato del módulo — verificación de imports modernos
+# =============================================================================
+
+def test_agent_no_usa_import_deprecated_de_langgraph():
+    """
+    Verifica que agent.py haya migrado completamente de create_react_agent
+    (langgraph.prebuilt, deprecated en LangGraph v1.0) hacia create_agent
+    (langchain.agents, API oficial y estable).
+    """
+    source = pathlib.Path("src/application/ai_agents/agent.py").read_text()
+    tree = ast.parse(source)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            # El import deprecado que debe haber desaparecido
+            if node.module == "langgraph.prebuilt":
+                deprecated_names = [alias.name for alias in node.names]
+                assert "create_react_agent" not in deprecated_names, (
+                    "Import DEPRECADO encontrado en agent.py: "
+                    "'from langgraph.prebuilt import create_react_agent'. "
+                    "Migrar a: 'from langchain.agents import create_agent' (LangGraph v1.0+)"
+                )
+
+    # Adicionalmente: el import moderno DEBE estar presente
+    has_new_import = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "langchain.agents":
+                names = [alias.name for alias in node.names]
+                if "create_agent" in names:
+                    has_new_import = True
+                    break
+
+    assert has_new_import, (
+        "No se encontró 'from langchain.agents import create_agent' en agent.py. "
+        "La migración al API oficial de LangGraph v1.0+ es obligatoria."
+    )
+
 
 
 def _make_ai_message(content: str, tool_calls: list = None) -> AIMessage:
