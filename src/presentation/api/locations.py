@@ -37,8 +37,8 @@ def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
 # ---------------------------------------------------------------------------
 
 @router.get("/api/countries", response_model=List[MasterCountry])
-async def get_countries(current_user: dict = Depends(get_current_user)):
-    """Retorna el catálogo global de países. Lectura para cualquier usuario autenticado."""
+async def get_countries():
+    """Retorna el catálogo global de países. Lectura pública."""
     return [MasterCountry(**c) for c in StorageService.get_countries()]
 
 
@@ -60,8 +60,8 @@ async def update_country(country_id: int, payload: CountryCreate, current_user: 
 # ---------------------------------------------------------------------------
 
 @router.get("/api/states", response_model=List[MasterState])
-async def get_states(country_id: int, current_user: dict = Depends(get_current_user)):
-    """Retorna los estados de un país. Lectura para cualquier usuario autenticado."""
+async def get_states(country_id: int):
+    """Retorna los estados de un país. Lectura pública."""
     return [MasterState(**s) for s in StorageService.get_states_by_country(country_id)]
 
 
@@ -93,9 +93,8 @@ async def get_cities(
     state_id: int | None = None,
     limit: int = 100,
     offset: int = 0,
-    current_user: dict = Depends(get_current_user),
 ):
-    """Retorna el catálogo de ciudades con jerarquía state_name / country_name."""
+    """Retorna el catálogo de ciudades con jerarquía. Lectura pública."""
     cities = StorageService.get_master_cities(limit=limit, offset=offset, state_id=state_id)
     return [MasterCityResponse(**c) for c in cities]
 

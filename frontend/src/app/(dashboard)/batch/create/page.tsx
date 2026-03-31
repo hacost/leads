@@ -18,12 +18,12 @@ import api from "@/lib/api"
 import { Info, Rocket } from "lucide-react"
 
 interface Country { id: number; name: string }
-interface State   { id: number; name: string; country_id: number }
-interface City    { id: number; name: string; state_id: number }
+interface State { id: number; name: string; country_id: number }
+interface City { id: number; name: string; state_id: number }
 
 export default function CreateBatchPage() {
   const router = useRouter()
-  const [categories, setCategories] = useState<Array<{id: number, name: string}>>([])
+  const [categories, setCategories] = useState<Array<{ id: number, name: string }>>([])
   const [selectedCategory, setSelectedCategory] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadingCats, setLoadingCats] = useState(false)
@@ -50,18 +50,18 @@ export default function CreateBatchPage() {
   // Global mode confirmed
   const [globalConfirmed, setGlobalConfirmed] = useState(false)
   const [totalCitiesDB, setTotalCitiesDB] = useState<number>(0)
-  
+
   // Load total cities for accurate global counts
   useEffect(() => {
-    api.get<City[]>('/api/locations/cities?limit=10000')
+    api.get<City[]>('/api/cities?limit=10000')
       .then(res => setTotalCitiesDB(res?.length || 0))
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   // Load Categories on mount
   useEffect(() => {
     setLoadingCats(true)
-    api.get<Array<{id: number, name: string}>>('/api/categories?limit=100')
+    api.get<Array<{ id: number, name: string }>>('/api/categories?limit=100')
       .then(res => setCategories(res || []))
       .catch(() => toast.error("Failed to load categories"))
       .finally(() => setLoadingCats(false))
@@ -69,7 +69,7 @@ export default function CreateBatchPage() {
 
   // Load Countries on mount
   useEffect(() => {
-    api.get<Country[]>("/api/locations/countries")
+    api.get<Country[]>("/api/countries")
       .then(res => setCountries(res || []))
       .catch(() => toast.error("Failed to load countries"))
   }, [])
@@ -80,7 +80,7 @@ export default function CreateBatchPage() {
       setStates([]); setSelectedState(""); setCities([]); setSelectedCity("");
       return
     }
-    api.get<State[]>(`/api/locations/states?country_id=${selectedCountry}`)
+    api.get<State[]>(`/api/states?country_id=${selectedCountry}`)
       .then(res => {
         setStates(res || [])
       })
@@ -93,7 +93,7 @@ export default function CreateBatchPage() {
       setCities([]); setSelectedCity(""); setManualCities([]);
       return
     }
-    api.get<City[]>(`/api/locations/cities?state_id=${selectedState}`)
+    api.get<City[]>(`/api/cities?state_id=${selectedState}`)
       .then(res => {
         setCities(res || [])
         setManualCities((res || []).map(c => c.id))
@@ -105,7 +105,7 @@ export default function CreateBatchPage() {
     if (!newCatName.trim()) return
     setIsCreatingCat(true)
     try {
-      const res = await api.post<{id: number, name: string}>('/api/categories', { name: newCatName.trim() })
+      const res = await api.post<{ id: number, name: string }>('/api/categories', { name: newCatName.trim() })
       setCategories([...categories, res])
       setSelectedCategory(res.id.toString())
       setNewCatName("")
@@ -129,7 +129,7 @@ export default function CreateBatchPage() {
   const calculateTotalJobs = () => {
     if (scope === 'city') return selectedCity ? 1 : 0
     if (scope === 'state') return stateMode === 'all' ? cities.length : manualCities.length
-    if (scope === 'global') return globalConfirmed ? totalCitiesDB : 0 
+    if (scope === 'global') return globalConfirmed ? totalCitiesDB : 0
     return 0
   }
 
@@ -152,19 +152,19 @@ export default function CreateBatchPage() {
       if (scope === 'city') {
         await api.post("/api/jobs", { category_id: catId, city_id: Number(selectedCity) })
         toast.success("Job queued successfully!")
-      } 
+      }
       else if (scope === 'state') {
         if (stateMode === 'all') {
           await api.post("/api/jobs/batch", { category_id: catId, state_id: Number(selectedState) })
           toast.success("State-wide batch jobs queued!")
         } else {
           // Manual mode: call individual POST /api/jobs
-          await Promise.all(manualCities.map(cId => 
+          await Promise.all(manualCities.map(cId =>
             api.post("/api/jobs", { category_id: catId, city_id: cId })
           ))
           toast.success(`${manualCities.length} jobs queued!`)
         }
-      } 
+      }
       else if (scope === 'global') {
         await api.post("/api/jobs/batch", { category_id: catId, all_cities: true })
         toast.success("National batch jobs queued!")
@@ -179,11 +179,11 @@ export default function CreateBatchPage() {
 
   const categoryName = categories.find(c => c.id.toString() === selectedCategory)?.name || "None"
   const totalJobs = calculateTotalJobs()
-  const targetLabel = scope === 'city' 
+  const targetLabel = scope === 'city'
     ? (cities.find(c => c.id.toString() === selectedCity)?.name || "Select city...")
     : scope === 'state'
-    ? (stateMode === 'all' ? `All cities in ${states.find(s => s.id.toString() === selectedState)?.name || 'state'}` : `${manualCities.length} selected in ${states.find(s => s.id.toString() === selectedState)?.name || 'state'}`)
-    : (globalConfirmed ? `All ${totalCitiesDB} cities mapping the database` : "Confirm national scope")
+      ? (stateMode === 'all' ? `All cities in ${states.find(s => s.id.toString() === selectedState)?.name || 'state'}` : `${manualCities.length} selected in ${states.find(s => s.id.toString() === selectedState)?.name || 'state'}`)
+      : (globalConfirmed ? `All ${totalCitiesDB} cities mapping the database` : "Confirm national scope")
 
   return (
     <div className="max-w-6xl mx-auto mb-10 text-slate-50 font-sans">
@@ -203,7 +203,7 @@ export default function CreateBatchPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-6">
-          
+
           {/* CATEGORY CARD */}
           <Card className="bg-[#0f172a] border-slate-800 shadow-xl shadow-black/20 rounded-2xl overflow-hidden">
             <CardHeader className="pb-4">
@@ -232,19 +232,19 @@ export default function CreateBatchPage() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="pt-5 border-t border-slate-800/50 space-y-3">
                 <Label className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Or create new</Label>
                 <div className="flex space-x-2">
-                  <Input 
-                    placeholder="New Category Name..." 
-                    value={newCatName} 
+                  <Input
+                    placeholder="New Category Name..."
+                    value={newCatName}
                     onChange={e => setNewCatName(e.target.value)}
                     className="bg-[#020617] border-slate-800 h-11 text-sm rounded-xl px-4"
                   />
-                  <Button 
-                    onClick={handleCreateCategory} 
-                    disabled={isCreatingCat || !newCatName} 
+                  <Button
+                    onClick={handleCreateCategory}
+                    disabled={isCreatingCat || !newCatName}
                     className="h-11 px-6 rounded-xl bg-slate-700 hover:bg-slate-600 font-semibold"
                   >
                     {isCreatingCat ? "..." : "Add"}
@@ -263,17 +263,16 @@ export default function CreateBatchPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              
+
               <div className="flex p-1 space-x-1 bg-[#020617] border border-slate-800 rounded-xl mb-8">
                 {['city', 'state', 'global'].map(tab => (
                   <button
                     key={tab}
                     onClick={() => setScope(tab as 'city' | 'state' | 'global')}
-                    className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                      scope === tab 
-                      ? 'bg-[#0f172a] text-white shadow-md border border-slate-800/80' 
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                    }`}
+                    className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${scope === tab
+                        ? 'bg-[#0f172a] text-white shadow-md border border-slate-800/80'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                      }`}
                   >
                     {tab === 'city' ? 'Specific City' : tab === 'state' ? 'State-wide Selection' : 'National Coverage'}
                   </button>
@@ -338,20 +337,20 @@ export default function CreateBatchPage() {
                     <Label className="text-xs font-semibold text-slate-400 uppercase tracking-widest block mb-4">Choose Selection Mode</Label>
                     <div className="flex gap-6 mb-6">
                       <label className="flex items-center gap-3 cursor-pointer text-sm font-medium">
-                        <input 
-                          type="radio" 
-                          className="w-4 h-4 text-blue-500 border-slate-700 bg-black" 
-                          checked={stateMode === 'all'} 
-                          onChange={() => setStateMode('all')} 
+                        <input
+                          type="radio"
+                          className="w-4 h-4 text-blue-500 border-slate-700 bg-black"
+                          checked={stateMode === 'all'}
+                          onChange={() => setStateMode('all')}
                         />
                         All cities in state
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer text-sm font-medium">
-                        <input 
-                          type="radio" 
-                          className="w-4 h-4 text-blue-500 border-slate-700 bg-black" 
-                          checked={stateMode === 'manual'} 
-                          onChange={() => setStateMode('manual')} 
+                        <input
+                          type="radio"
+                          className="w-4 h-4 text-blue-500 border-slate-700 bg-black"
+                          checked={stateMode === 'manual'}
+                          onChange={() => setStateMode('manual')}
                         />
                         Manual selection
                       </label>
@@ -361,9 +360,9 @@ export default function CreateBatchPage() {
                       <div className="bg-[#020617] border border-slate-800 rounded-xl overflow-hidden mt-2">
                         <div className="bg-blue-900/10 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
                           <span className="text-sm font-medium text-slate-300">Select cities to include:</span>
-                          <button 
-                            type="button" 
-                            onClick={() => setManualCities(manualCities.length === cities.length ? [] : cities.map(c=>c.id))}
+                          <button
+                            type="button"
+                            onClick={() => setManualCities(manualCities.length === cities.length ? [] : cities.map(c => c.id))}
                             className="text-xs font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase"
                           >
                             {manualCities.length === cities.length ? 'Deselect All' : 'Select All'}
@@ -372,9 +371,9 @@ export default function CreateBatchPage() {
                         <div className="max-h-56 overflow-y-auto custom-scrollbar">
                           {cities.map(city => (
                             <label key={city.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-800/60 hover:bg-slate-900/80 cursor-pointer transition-colors">
-                              <input 
-                                type="checkbox" 
-                                className="w-4 h-4 rounded text-blue-500" 
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded text-blue-500"
                                 checked={manualCities.includes(city.id)}
                                 onChange={() => toggleCityCheck(city.id)}
                               />
@@ -401,9 +400,9 @@ export default function CreateBatchPage() {
 
                     <div className="bg-blue-900/10 border border-slate-800 rounded-xl p-5">
                       <label className="flex items-center gap-4 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          className="w-5 h-5 rounded border-slate-700" 
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 rounded border-slate-700"
                           checked={globalConfirmed}
                           onChange={(e) => setGlobalConfirmed(e.target.checked)}
                         />
@@ -428,7 +427,7 @@ export default function CreateBatchPage() {
               <CardDescription className="text-slate-400">Estimated results</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5 pt-4">
-              
+
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5 relative overflow-hidden">
                 <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl"></div>
                 <Label className="text-[11px] font-bold text-blue-400 uppercase tracking-widest">Impact Volume</Label>
@@ -465,8 +464,8 @@ export default function CreateBatchPage() {
 
             </CardContent>
             <CardFooter className="pt-2 pb-6">
-              <Button 
-                onClick={handleSubmit} 
+              <Button
+                onClick={handleSubmit}
                 disabled={isSubmitting || !isFormValid()}
                 className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white font-bold text-base shadow-lg shadow-blue-600/25 transition-all rounded-xl disabled:opacity-50"
               >
